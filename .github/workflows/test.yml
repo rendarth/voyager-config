@@ -37,37 +37,4 @@ jobs:
       - name: Smoke ${{ matrix.image }}
         env:
           SMOKE_IMG: ${{ matrix.image }}
-        run: |
-          docker run --rm -e SMOKE_IMG="$SMOKE_IMG" -v "$PWD:/repo:ro" "$SMOKE_IMG" bash -euo pipefail -c '
-            set -Eeuo pipefail
-            export HOME=/smoke-home
-            export VOYAGER_ROOT=/repo
-            rm -rf /smoke-home; mkdir -p /smoke-home
-
-            echo ">> bash -n"
-            while IFS= read -r -d "" f; do bash -n "$f"; done < <(find /repo -name "*.sh" -not -path "*/.git/*" -not -path "*/.tools/*" -print0)
-
-            echo ">> configs stage (portable path)"
-            bash /repo/bootstrap.sh --stage configs --yes
-
-            echo ">> spot checks"
-            test -f /smoke-home/.config/shell/aliases
-            test -f /smoke-home/.config/opencode/opencode.json
-            test -d /smoke-home/.config/environment.d
-            test -x /smoke-home/.local/bin/omarchy-agent
-            test -f /smoke-home/.config/starship.toml
-
-            echo ">> self-fetch (patch: master artifact) [best-effort]"
-            ( HOME=/smoke-fetch bash <<"SPIN"
-               set -Eeuo pipefail
-               mkdir -p /smoke-fetch
-               curl -fsSL "https://raw.githubusercontent.com/rendarth/voyager-config/master/spin.sh" -o /tmp/spin.sh 2>/dev/null || exit 0
-               chmod +x /tmp/spin.sh
-               bash /tmp/spin.sh --no-verify --stage configs
-SPIN
-            ) >/tmp/sf.log 2>&1 && echo "  self-fetch PASS" || { echo "  self-fetch skipped:"; tail -3 /tmp/sf.log; }
-
-            echo ">> repo-tree verify"
-            bash /repo/scripts/verify/verify-session.sh --repo
-            echo "PASS: $SMOKE_IMG"
-          '
+        run: docker run --rm -e SMOKE_IMG -v "$PWD:/repo:ro" "$SMOKE_IMG" bash /repo/scripts/test/docker-smoke-body.sh
