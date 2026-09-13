@@ -33,7 +33,7 @@ rm -rf "$HOME" /smoke-fetch /tmp/sf.log
 mkdir -p "$HOME" /smoke-fetch /tmp
 
 echo ">> bash -n on all scripts"
-while IFS= read -r -d "" f; do bash -n "$f"; done < <(find /repo -name "*.sh" -not -path "*/.git/*" -not -path "*/.tools/*" -not -path "*/scripts/legacy/*" -print0)
+while IFS= read -r -d "" f; do bash -n "$f"; done < <(find /repo -name "*.sh" -not -path "*/.git/*" -not -path "*/.tools/*" -print0)
 
 echo ">> configs stage (portable path) into isolated HOME"
 bash /repo/bootstrap.sh --stage configs --yes

@@ -11,7 +11,7 @@ TOOLS        := .tools
 BATS         := $(TOOLS)/bats-core/bin/bats
 SHELLCHECK   := $(shell command -v shellcheck 2>/dev/null || echo "")
 
-FILES := $(shell find . -name '*.sh' -not -path './.git/*' -not -path './.tools/*' -not -path './configs/*' -not -path './portable/*' -not -path './scripts/legacy/*' | sort)
+FILES := $(shell find . -name '*.sh' -not -path './.git/*' -not -path './.tools/*' -not -path './configs/*' -not -path './portable/*' | sort)
 # shfmt only on script files that don't embed heredoc templates (theme gens contain .qml/.css)
 SHFMT_FILES := $(filter-out ./scripts/theme/%,$(FILES))
 
