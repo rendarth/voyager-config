@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+#
+# ai-diagnose-errors: Launches the default agent in a terminal to diagnose and repair recent system errors.
+#
+set -euo pipefail
+
+LOG_FILE="/tmp/sys-vacuum-errors.txt"
+
+if [ -f "$LOG_FILE" ] && [ -s "$LOG_FILE" ]; then
+    ERROR_DATA=$(cat "$LOG_FILE")
+else
+    # Fallback: scan recent journal errors
+    ERROR_DATA=$(journalctl -p 3..0 -b 0 --no-pager -o cat 2>/dev/null \
+        | sed -E -e 's/\[[0-9]+\]:/: /g' -e 's/0x[0-9a-fA-F]+/0x*/g' -e 's/PID [0-9]+/PID */g' \
+        | sort | uniq -c | sort -nr | head -n 15 || true)
+fi
+
+PROMPT="I received an automated system alert regarding recurring error logs. Please diagnose the underlying root cause of these errors and help me resolve/repair them step-by-step.
+
+Captured Error Summary:
+$ERROR_DATA"
+
+if command -v omarchy-agent >/dev/null 2>&1; then
+    exec omarchy-agent --prompt "$PROMPT"
+elif command -v opencode >/dev/null 2>&1; then
+    if command -v xdg-terminal-exec >/dev/null 2>&1; then
+        exec xdg-terminal-exec --app-id=org.omarchy.agent -- opencode --prompt "$PROMPT"
+    else
+        exec opencode --prompt "$PROMPT"
+    fi
+elif command -v agy >/dev/null 2>&1; then
+    if command -v xdg-terminal-exec >/dev/null 2>&1; then
+        exec xdg-terminal-exec --app-id=org.omarchy.agent -- agy -i "$PROMPT"
+    else
+        exec agy -i "$PROMPT"
+    fi
+fi

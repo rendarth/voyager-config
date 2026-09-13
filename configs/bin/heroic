@@ -1,0 +1,2 @@
+#!/bin/sh
+exec mullvad-exclude /opt/Heroic/heroic "$@"

@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+#
+# sys-vacuum: System log vacuuming, cache maintenance, and repeated error detector with interactive AI diagnostic.
+#
+set -euo pipefail
+
+THRESHOLD=10
+TIMEFRAME="24 hours ago"
+SEND_NOTIFICATION=true
+MODE="all" # all | check | vacuum
+
+usage() {
+    cat << 'HELP'
+Usage: sys-vacuum [OPTIONS]
+
+Options:
+  -a, --all              Run both log vacuuming and error monitoring (default)
+  -c, --check            Only analyze logs for repeating errors
+  -v, --vacuum           Only run system and log vacuuming
+  -t, --threshold <NUM>  Alert threshold for repeating errors (default: 10)
+  -w, --window <TIME>    Timeframe for error scan (default: "24 hours ago", e.g. "1 hour ago", "boot")
+      --no-notify        Disable desktop notifications
+  -h, --help             Show this help message
+HELP
+}
+
+# Parse flags
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -a|--all)
+            MODE="all"
+            shift
+            ;;
+        -c|--check)
+            MODE="check"
+            shift
+            ;;
+        -v|--vacuum)
+            MODE="vacuum"
+            shift
+            ;;
+        -t|--threshold)
+            THRESHOLD="$2"
+            shift 2
+            ;;
+        -w|--window)
+            TIMEFRAME="$2"
+            shift 2
+            ;;
+        --no-notify)
+            SEND_NOTIFICATION=false
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+echo "========================================================"
+echo "          SYSTEM MAINTENANCE & LOG VACUUM               "
+echo "========================================================"
+
+# --- 1. Repeated Error Detection ---
+if [ "$MODE" = "all" ] || [ "$MODE" = "check" ]; then
+    echo -e "\n[*] Scanning system journal for repeated errors ($TIMEFRAME)..."
+    
+    JOURNAL_ARGS=("-p" "3..0" "--no-pager" "-o" "cat")
+    if [ "$TIMEFRAME" = "boot" ]; then
+        JOURNAL_ARGS+=("-b" "0")
+    else
+        JOURNAL_ARGS+=("--since" "$TIMEFRAME")
+    fi
+
+    # Group errors by stripping timestamps, PIDs, addresses, and line numbers
+    REPEATED_ERRORS=$(journalctl "${JOURNAL_ARGS[@]}" 2>/dev/null \
+        | sed -E \
+            -e 's/\[[0-9]+\]:/: /g' \
+            -e 's/0x[0-9a-fA-F]+/0x*/g' \
+            -e 's/PID [0-9]+/PID */g' \
+            -e 's/^[ \t]*#[0-9]+[ \t]+//g' \
+            -e 's/^[ \t]+//;s/[ \t]+$//' \
+        | grep -v '^[[:space:]]*$' \
+        | sort \
+        | uniq -c \
+        | sort -nr \
+        | awk -v th="$THRESHOLD" '$1 >= th { print }' || true)
+
+    if [ -n "$REPEATED_ERRORS" ]; then
+        echo -e "\n[!] ALERT: High frequency repeated error(s) detected (>= $THRESHOLD occurrences):"
+        echo "--------------------------------------------------------"
+        echo "$REPEATED_ERRORS" | head -n 15 | while read -r count msg; do
+            printf "  %-6s %s\n" "[$count x]" "$msg"
+        done
+        echo "--------------------------------------------------------"
+
+        # Save to temporary file for the AI diagnostic launcher
+        echo "$REPEATED_ERRORS" > /tmp/sys-vacuum-errors.txt
+
+        if [ "$SEND_NOTIFICATION" = true ]; then
+            TOP_COUNT=$(echo "$REPEATED_ERRORS" | head -n 1 | awk '{print $1}')
+            TOP_ERROR=$(echo "$REPEATED_ERRORS" | head -n 1 | sed -E 's/^[ ]*[0-9]+[ ]*//')
+            
+            if command -v omarchy-notification-send >/dev/null 2>&1; then
+                omarchy-notification-send \
+                    -u critical \
+                    -g 󰢌 \
+                    "Log Alert: Repeated System Errors ($TOP_COUNT repeats)" \
+                    "Click notification to open default AI agent and diagnose.\n${TOP_ERROR:0:70}..." \
+                    --exec /home/pat/.local/bin/ai-diagnose-errors
+            elif command -v notify-send >/dev/null 2>&1; then
+                (
+                    ACTION=$(notify-send \
+                        --urgency=critical \
+                        --icon=dialog-warning \
+                        --action="default=Diagnose & Fix with AI" \
+                        --action="diagnose=Diagnose & Fix with AI" \
+                        "Log Alert: Repeated System Errors ($TOP_COUNT repeats)" \
+                        "Click to diagnose with AI.\n${TOP_ERROR:0:70}...") || true
+                    if [ "$ACTION" = "default" ] || [ "$ACTION" = "diagnose" ]; then
+                        /home/pat/.local/bin/ai-diagnose-errors
+                    fi
+                ) </dev/null >/dev/null 2>&1 &
+            fi
+        fi
+    else
+        echo "  [✓] No abnormal repeating error patterns found (threshold: $THRESHOLD)."
+    fi
+fi
+
+# --- 2. Vacuum Logs and Caches ---
+if [ "$MODE" = "all" ] || [ "$MODE" = "vacuum" ]; then
+    echo -e "\n[*] Performing system log & cache vacuuming..."
+
+    # Journald vacuuming
+    echo "  -> Vacuuming systemd journal (retaining max 14 days / 250MB)..."
+    if [ "$EUID" -eq 0 ]; then
+        journalctl --vacuum-time=14d --vacuum-size=250M >/dev/null 2>&1 || true
+    elif command -v pkexec >/dev/null 2>&1; then
+        pkexec journalctl --vacuum-time=14d --vacuum-size=250M >/dev/null 2>&1 || true
+    fi
+
+    # Coredump vacuuming
+    if command -v coredumpctl >/dev/null 2>&1; then
+        echo "  -> Vacuuming coredumps (retaining recent dumps)..."
+        if [ "$EUID" -eq 0 ]; then
+            coredumpctl vacuum --vacuum-time=7d >/dev/null 2>&1 || true
+        elif command -v pkexec >/dev/null 2>&1; then
+            pkexec coredumpctl vacuum --vacuum-time=7d >/dev/null 2>&1 || true
+        fi
+    fi
+
+    # Pacman Cache Cleaning
+    if command -v paccache >/dev/null 2>&1; then
+        echo "  -> Cleaning pacman package cache (keeping last 2 installed versions)..."
+        if [ "$EUID" -eq 0 ]; then
+            paccache -rk2 -q >/dev/null 2>&1 || true
+            paccache -ruk0 -q >/dev/null 2>&1 || true
+        elif command -v pkexec >/dev/null 2>&1; then
+            pkexec paccache -rk2 -q >/dev/null 2>&1 || true
+            pkexec paccache -ruk0 -q >/dev/null 2>&1 || true
+        fi
+    fi
+
+    # Flatpak unused runtimes
+    if command -v flatpak >/dev/null 2>&1; then
+        echo "  -> Cleaning unused Flatpak runtimes..."
+        flatpak uninstall --unused -y >/dev/null 2>&1 || true
+    fi
+
+    # User thumbnail & temporary cache cleanup (>30 days old)
+    echo "  -> Cleaning old user thumbnail cache (>30 days)..."
+    find "$HOME/.cache/thumbnails" -type f -atime +30 -delete 2>/dev/null || true
+
+    echo -e "\n[✓] Vacuuming and maintenance completed successfully."
+fi

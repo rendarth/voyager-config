@@ -4,6 +4,7 @@ codex = "0.150.0"
 gh = "latest"
 node = "26.7.0"
 opencode = "latest"
+pi = "latest"
 python = "3.12"
 rust = "latest"
 

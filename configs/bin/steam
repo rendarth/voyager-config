@@ -1,0 +1,2 @@
+#!/bin/sh
+exec mullvad-exclude /usr/bin/prime-run /usr/bin/steam "$@"
