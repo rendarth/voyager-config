@@ -7,6 +7,26 @@
 # ==============================================================================
 set -Eeuo pipefail
 
+ensure_tool() {
+	local tool="$1"
+	command -v "$tool" >/dev/null 2>&1 && return 0
+	echo "  installing $tool ..."
+	if command -v apt-get >/dev/null 2>&1; then
+		apt-get update -qq && apt-get install -y -qq --no-install-recommends "$tool" ca-certificates
+	elif command -v dnf >/dev/null 2>&1; then
+		dnf install -y -q "$tool"
+	elif command -v pacman >/dev/null 2>&1; then
+		pacman -Sy --noconfirm "$tool"
+	elif command -v apk >/dev/null 2>&1; then
+		apk add --no-cache "$tool"
+	else
+		echo "  NO package manager known for $tool on $SMOKE_IMG"
+		return 1
+	fi
+}
+ensure_tool bash
+ensure_tool curl
+
 export HOME=${SMOKE_HOME:-/smoke-home}
 export VOYAGER_ROOT=/repo
 rm -rf "$HOME" /smoke-fetch /tmp/sf.log
@@ -28,15 +48,23 @@ test -f "$HOME/.config/wallpapers/crowned.jpg"
 printf "config dirs deployed: %s\n" "$(find "$HOME/.config" -mindepth 1 -maxdepth 1 -type d | wc -l)"
 
 echo ">> self-fetch install (real GitHub master, best-effort)"
-{
-  HOME=/smoke-fetch bash <<"SPIN"
-    set -Eeuo pipefail
-    mkdir -p /smoke-fetch
-    curl -fsSL "https://raw.githubusercontent.com/rendarth/voyager-config/master/spin.sh" -o /tmp/spin.sh 2>/dev/null || exit 3
-    chmod +x /tmp/spin.sh
-    bash /tmp/spin.sh --no-verify --stage configs
+if command -v curl >/dev/null 2>&1; then
+	{
+		printf 'self-fetch start (%s)\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+		HOME=/smoke-fetch bash <<"SPIN"
+set -Eeuo pipefail
+mkdir -p /smoke-fetch
+curl -fsSL "https://raw.githubusercontent.com/rendarth/voyager-config/master/spin.sh" -o /tmp/spin.sh
+chmod +x /tmp/spin.sh
+bash /tmp/spin.sh --no-verify --stage configs --yes
 SPIN
-} >/tmp/sf.log 2>&1 && echo "  self-fetch PASS" || { echo "  self-fetch skipped:"; tail -3 /tmp/sf.log; }
+	} >/tmp/sf.log 2>&1 && echo "  self-fetch PASS" || {
+		echo "  self-fetch FAILED (log below):"
+		tail -5 /tmp/sf.log
+	}
+else
+	echo "  self-fetch SKIPPED: curl unavailable"
+fi
 
 echo ">> repo-tree verify"
 bash /repo/scripts/verify/verify-session.sh --repo
