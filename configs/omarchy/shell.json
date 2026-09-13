@@ -4,7 +4,11 @@
     "layout": {
       "center": [
         {
-          "id": "omarchy.indicators"
+          "id": "omarchy.indicators",
+          "items": [
+            "Dictation",
+            "NightLight"
+          ]
         },
         {
           "id": "omarchy.clock",
@@ -19,6 +23,9 @@
           "id": "omarchy.weather"
         },
         {
+          "id": "quickshell.spotify"
+        },
+        {
           "id": "omarchy.system-update"
         }
       ],
@@ -27,7 +34,7 @@
           "id": "omarchy.menu"
         },
         {
-          "id": "omarchy.workspaces"
+          "id": "theruckh.workspaces-per-monitor"
         }
       ],
       "right": [
@@ -35,63 +42,31 @@
           "id": "omarchy.tray"
         },
         {
-          "id": "paulie420.vpn",
-          "openvpn": [
-            {
-              "label": "PIA California",
-              "unit": "openvpn-client@us_california",
-              "iface": "tun0"
-            },
-            {
-              "label": "PIA Las Vegas",
-              "unit": "openvpn-client@us_las_vegas",
-              "iface": "tun0"
-            },
-            {
-              "label": "PIA New Mexico",
-              "unit": "openvpn-client@us_new_mexico",
-              "iface": "tun0"
-            },
-            {
-              "label": "PIA Salt Lake City",
-              "unit": "openvpn-client@us_salt_lake_city",
-              "iface": "tun0"
-            },
-            {
-              "label": "PIA London",
-              "unit": "openvpn-client@uk_london",
-              "iface": "tun0"
-            },
-            {
-              "label": "PIA Amsterdam",
-              "unit": "openvpn-client@netherlands",
-              "iface": "tun0"
-            },
-            {
-              "label": "PIA Tokyo",
-              "unit": "openvpn-client@jp_tokyo",
-              "iface": "tun0"
-            },
-            {
-              "label": "PIA Johannesburg",
-              "unit": "openvpn-client@south_africa",
-              "iface": "tun0"
-            },
-            {
-              "label": "PIA Sydney",
-              "unit": "openvpn-client@au_sydney",
-              "iface": "tun0"
-            }
-          ]
+          "id": "io.github.justspica.omaguard"
         },
         {
-          "id": "io.github.elevate08.qs-bitwarden-cli",
-          "pinUnlock": true,
-          "autoLockMinutes": 60,
-          "closeOnCopy": false
+          "id": "zakarch.borders"
         },
         {
-          "id": "omarchy.agents"
+          "id": "jrmmhm.pocket",
+          "members": "omarchy.tray, zakarch.borders"
+        },
+        {
+          "id": "io.github.imryiuk.workspace-profiles"
+        },
+        {
+          "id": "io.rendarth.chromarchy",
+          "category": "all",
+          "colorKeys": [
+            "accent",
+            "background",
+            "cyan",
+            "magenta"
+          ],
+          "colorMode": "matching",
+          "interval": 3600,
+          "keywords": "landscape",
+          "maxScore": 35
         },
         {
           "id": "omarchy.bluetooth"
@@ -103,6 +78,9 @@
           "id": "omarchy.audio"
         },
         {
+          "id": "omarchy.agents"
+        },
+        {
           "id": "omarchy.monitor"
         },
         {
@@ -111,10 +89,11 @@
       ]
     },
     "position": "top",
-    "transparent": true
+    "transparent": true,
+    "id": "io.github.guiestrela.glassbar"
   },
   "idle": {
-    "lock": 999999999,
+    "lock": 900,
     "screensaver": 150
   },
   "plugins": [
@@ -126,7 +105,24 @@
     },
     {
       "id": "zzwong.stage"
+    },
+    {
+      "id": "io.github.sirjul1337.lock-explorer",
+      "design": "editorial",
+      "unlock": "fade",
+      "boot": "theme"
+    },
+    {
+      "id": "io.github.mtolhuys.theme-manager"
     }
   ],
-  "version": 1
+  "version": 1,
+  "disabledPlugins": [
+    "omarchy.lock",
+    "omarchy.image-picker"
+  ],
+  "cloneSourceRestores": [
+    "io.github.sirjul1337.lock-explorer",
+    "io.github.mtolhuys.theme-manager"
+  ]
 }

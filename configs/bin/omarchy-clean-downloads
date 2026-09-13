@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Weekly Downloads folder organizer & 90-day retention notifier
+set -euo pipefail
+
+DOWNLOADS_DIR="$HOME/Downloads"
+OLD_DOWNLOADS="$DOWNLOADS_DIR/Old Downloads"
+
+mkdir -p "$OLD_DOWNLOADS"
+
+echo "=== Moving loose files from Downloads to '$OLD_DOWNLOADS' ==="
+moved_count=0
+
+shopt -s nullglob dotglob
+for item in "$DOWNLOADS_DIR"/*; do
+    basename_item="$(basename "$item")"
+    if [[ "$basename_item" == "Old Downloads" || "$basename_item" == "." || "$basename_item" == ".." ]]; then
+        continue
+    fi
+    dest="$OLD_DOWNLOADS/$basename_item"
+    if [[ -e "$dest" ]]; then
+        dest="$OLD_DOWNLOADS/${basename_item}.$(date +%s)"
+    fi
+    mv "$item" "$dest"
+    ((moved_count++)) || true
+done
+shopt -u nullglob dotglob
+
+echo "Moved $moved_count item(s) to '$OLD_DOWNLOADS'."
+
+# Check for files older than 90 days inside Old Downloads
+old_files=$(find "$OLD_DOWNLOADS" -mindepth 1 -mtime +90 2>/dev/null || true)
+if [[ -n "$old_files" ]]; then
+    old_count=$(echo "$old_files" | grep -v '^[[:space:]]*$' | wc -l)
+else
+    old_count=0
+fi
+
+echo "Found $old_count file(s) older than 90 days in '$OLD_DOWNLOADS'."
+
+if (( old_count > 0 )); then
+    if command -v omarchy-notification-send >/dev/null 2>&1; then
+        omarchy-notification-send \
+            -g 📥 \
+            -u normal \
+            "Old Downloads Review" \
+            "Found $old_count file(s) in 'Old Downloads' older than 90 days. Click to review in Thunar." \
+            --exec thunar "$OLD_DOWNLOADS"
+    elif command -v notify-send >/dev/null 2>&1; then
+        notify-send \
+            --urgency=normal \
+            --icon=folder-download \
+            "Old Downloads Review" \
+            "Found $old_count file(s) in 'Old Downloads' older than 90 days."
+    fi
+fi
