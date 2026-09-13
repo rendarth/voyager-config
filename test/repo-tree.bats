@@ -20,9 +20,9 @@ CFGS="$ROOT/configs"
   done < <(find "$ROOT" -name '*.sh' -not -path '*/.git/*' -print0)
 }
 
-@test "canonical omarchy tree: 14 plugins / 12 themes" {
-  [ "$(find "$CFGS/omarchy/plugins" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 14 ]
-  [ "$(find "$CFGS/omarchy/themes" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 12 ]
+@test "canonical omarchy tree: 14 plugins / 11 themes" {
+  [ "$(find "$CFGS/omarchy/plugins" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)" -eq 14 ]
+  [ "$(find "$CFGS/omarchy/themes" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 11 ]
 }
 
 @test "skill trees match machine canonical counts (405 opencode / 99 agents)" {

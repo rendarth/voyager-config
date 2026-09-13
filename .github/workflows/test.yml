@@ -12,6 +12,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Install shfmt (v3.13.1, matches local)
+        run: |
+          curl -fsSLo /tmp/shfmt https://github.com/mvdan/sh/releases/download/v3.13.1/shfmt_v3.13.1_linux_amd64
+          chmod +x /tmp/shfmt
+          sudo mv /tmp/shfmt /usr/local/bin/shfmt
       - name: Setup bats
         run: make setup-test
       - name: Lint
@@ -28,13 +33,7 @@ jobs:
 
   matrix-smoke:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        image: [debian:12, ubuntu:24.04, archlinux, fedora:42, alpine:3.21]
     steps:
       - uses: actions/checkout@v4
-      - name: Smoke ${{ matrix.image }}
-        env:
-          SMOKE_IMG: ${{ matrix.image }}
-        run: docker run --rm -e SMOKE_IMG -v "$PWD:/repo:ro" "$SMOKE_IMG" bash /repo/scripts/test/docker-smoke-body.sh
+      - name: Container smoke matrix (debian, ubuntu, arch, fedora, alpine)
+        run: bash scripts/test/docker-smoke.sh "$PWD"

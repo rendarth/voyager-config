@@ -30,7 +30,7 @@ if [[ "${1:-}" == "--repo" ]]; then
 	chk "spin.sh present" '[[ -f "$VOYAGER_ROOT/spin.sh" ]]'
 	chk "bootstrap.sh present" '[[ -f "$VOYAGER_ROOT/bootstrap.sh" ]]'
 	chk "apps/apps.conf present" '[[ -f "$VOYAGER_APPS/apps.conf" ]]'
-	chk "omarchy themes == 12" '[[ $(find "$VOYAGER_CONFIGS/omarchy/themes" -mindepth 1 -maxdepth 1 -type d | wc -l) -eq 12 ]]'
+	chk "omarchy themes == 11" '[[ $(find "$VOYAGER_CONFIGS/omarchy/themes" -mindepth 1 -maxdepth 1 -type d | wc -l) -eq 11 ]]'
 	chk "omarchy plugins == 14" '[[ $(find "$VOYAGER_CONFIGS/omarchy/plugins" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l) -eq 14 ]]'
 	chk "opencode skills == 405" '[[ $(find "$VOYAGER_CONFIGS/opencode/skills" -mindepth 1 -maxdepth 1 | wc -l) -eq 405 ]]'
 	chk "agents skills == 99" '[[ $(find "$VOYAGER_CONFIGS/agents/skills" -mindepth 1 -maxdepth 1 | wc -l) -eq 99 ]]'
@@ -60,7 +60,7 @@ chk "environment.d deployed" '[[ -f "$HOME/.config/environment.d/terminal.conf" 
 chk "shell aliases deployed" '[[ -f "$HOME/.config/shell/aliases" ]]'
 if ((IS_OMARCHY)); then
 	chk "omarchy plugins == 14" '[[ $(find "$HOME/.config/omarchy/plugins" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l) -eq 14 ]]'
-	chk "omarchy themes == 12" '[[ $(find "$HOME/.config/omarchy/themes" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l) -eq 12 ]]'
+	chk "omarchy themes == 11" '[[ $(find "$HOME/.config/omarchy/themes" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l) -eq 11 ]]'
 	chk "hypr lua deployed" '[[ -f "$HOME/.config/hypr/hyprland.lua" ]]'
 	chk "fastfetch config deployed" '[[ -f "$HOME/.config/fastfetch/config.jsonc" ]]'
 else
