@@ -13,7 +13,7 @@
 #   gaming     Steam/Proton, Battle.net, Heroic, udev fixes
 #   apps       standalone apps (native -> distrobox -> flatpak -> pwa)
 #   webapps    chromium app-mode webapp engine
-#   bootloader Limine EFI boot entry (guarded)
+#   bootloader Leave the OS bootloader alone (opt-in: VOYAGER_MANAGE_BOOTLOADER=limine)
 #   verify     post-flight session checks
 # ==============================================================================
 set -Eeuo pipefail
@@ -149,7 +149,7 @@ stage_configs() { bash "$VOYAGER_SCRIPTS/deploy/deploy-configs.sh"; }
 stage_agents() { bash "$VOYAGER_SCRIPTS/agents/setup-agents.sh"; }
 stage_gaming() { bash "$VOYAGER_SCRIPTS/gaming/setup-gaming.sh"; }
 stage_webapps() { bash "$VOYAGER_SCRIPTS/webapps/setup-webapps.sh"; }
-stage_bootloader() { bash "$VOYAGER_SCRIPTS/bootloader/setup-limine.sh"; }
+stage_bootloader() { bash "$VOYAGER_SCRIPTS/bootloader/setup-bootloader.sh"; }
 stage_verify() { bash "$VOYAGER_SCRIPTS/verify/verify-session.sh"; }
 
 stage_apps() {
