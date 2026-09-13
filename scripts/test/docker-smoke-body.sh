@@ -48,22 +48,20 @@ test -f "$HOME/.config/wallpapers/crowned.jpg"
 printf "config dirs deployed: %s\n" "$(find "$HOME/.config" -mindepth 1 -maxdepth 1 -type d | wc -l)"
 
 echo ">> self-fetch install (real GitHub master, best-effort)"
-if command -v curl >/dev/null 2>&1; then
-	{
-		printf 'self-fetch start (%s)\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-		HOME=/smoke-fetch bash <<"SPIN"
+if {
+	printf 'self-fetch start (%s)\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+	HOME=/smoke-fetch bash <<"SPIN"
 set -Eeuo pipefail
 mkdir -p /smoke-fetch
 curl -fsSL "https://raw.githubusercontent.com/rendarth/voyager-config/master/spin.sh" -o /tmp/spin.sh
 chmod +x /tmp/spin.sh
 bash /tmp/spin.sh --no-verify --stage configs --yes
 SPIN
-	} >/tmp/sf.log 2>&1 && echo "  self-fetch PASS" || {
-		echo "  self-fetch FAILED (log below):"
-		tail -5 /tmp/sf.log
-	}
+} >/tmp/sf.log 2>&1; then
+	echo "  self-fetch PASS"
 else
-	echo "  self-fetch SKIPPED: curl unavailable"
+	echo "  self-fetch FAILED (log below):"
+	tail -5 /tmp/sf.log
 fi
 
 echo ">> repo-tree verify"
