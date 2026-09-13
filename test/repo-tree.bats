@@ -55,12 +55,11 @@ CFGS="$ROOT/configs"
   [[ -f "$CFGS/opencode/instructions.md" ]]
 }
 
-@test "mise config union contains python+rust and no pi" {
+@test "mise config union contains python, rust, and pi" {
   grep -q 'python' "$CFGS/mise/config.toml"
   grep -q 'rust' "$CFGS/mise/config.toml"
+  grep -q '\bpi\b' "$CFGS/mise/config.toml"
   grep -q 'auto_prune' "$CFGS/mise/config.toml"
-  run grep -q '\bpi\b' "$CFGS/mise/config.toml"
-  [ "$status" -eq 1 ]
 }
 
 @test "wallpapers = canonical 9-file aether set" {
