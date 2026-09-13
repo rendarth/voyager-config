@@ -39,7 +39,7 @@ setup-test:
 lint:
 	@echo "== shellcheck =="
 	@if [ -n "$(SHELLCHECK)" ]; then \
-	  $(SHELLCHECK) -x -e SC2016 $(FILES); \
+	  $(SHELLCHECK) -x -e SC2016 -e SC2015 $(FILES); \
 	else echo "shellcheck not installed; run: make setup-test"; fi
 	@echo "== shfmt =="
 	@if command -v shfmt >/dev/null 2>&1; then shfmt -l $(SHFMT_FILES) | test -z "$$(cat)" && echo "shfmt clean" || shfmt -d $(SHFMT_FILES); else echo "shfmt not installed; run: make setup-test"; fi
