@@ -77,7 +77,7 @@ mkdir -p "$(dirname "$LOG")" "$VOYAGER_DIR"
 	fi
 
 	# 10. Prune junk before commit
-	find "$VOYAGER_DIR/configs" -name '*.bak.*' -type f -delete 2>/dev/null || true
+	find "$VOYAGER_DIR/configs" -name '*.bak*' -type f -delete 2>/dev/null || true
 	find "$VOYAGER_DIR/configs" -name __pycache__ -type d -prune -exec rm -rf {} \; 2>/dev/null || true
 	find "$VOYAGER_DIR/configs" -name .git -type d -prune -exec rm -rf {} + 2>/dev/null || true
 
