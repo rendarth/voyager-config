@@ -46,6 +46,7 @@ mkdir -p "$(dirname "$LOG")" "$VOYAGER_DIR"
 	# 5. AI tools
 	mkdir -p "$VOYAGER_DIR/configs/opencode" "$VOYAGER_DIR/configs/antigravity"
 	rsync -a --delete --exclude="node_modules" --exclude="skills/__pycache__" \
+		--exclude="opencode.json.tui-migration.bak" \
 		"$HOME/.config/opencode/" "$VOYAGER_DIR/configs/opencode/" 2>/dev/null || true
 	[ -f "$HOME/.gemini/antigravity-cli/settings.json" ] &&
 		cp -u "$HOME/.gemini/antigravity-cli/settings.json" "$VOYAGER_DIR/configs/antigravity/"
@@ -78,6 +79,7 @@ mkdir -p "$(dirname "$LOG")" "$VOYAGER_DIR"
 	# 10. Prune junk before commit
 	find "$VOYAGER_DIR/configs" -name '*.bak.*' -type f -delete 2>/dev/null || true
 	find "$VOYAGER_DIR/configs" -name __pycache__ -type d -prune -exec rm -rf {} \; 2>/dev/null || true
+	find "$VOYAGER_DIR/configs" -name .git -type d -prune -exec rm -rf {} + 2>/dev/null || true
 
 	# 11. Commit & push
 	cd "$VOYAGER_DIR"
