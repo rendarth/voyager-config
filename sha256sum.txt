@@ -1,0 +1,8 @@
+# sha256sum.txt — generated with `make sha256` after tagging a release.
+# spin.sh verifies this file against the published tarball when the user
+# pins a tag (--tag vX.Y.Z). The master branch is fetched unverified (with a
+# warning) from https://github.com/rendarth/voyager-config/archive/refs/heads/master.tar.gz
+#
+# Format: <sha256>  voyager-config-vX.Y.Z.tar.gz
+#
+# <placeholder — run `make sha256` after `git tag v1.0.0`>

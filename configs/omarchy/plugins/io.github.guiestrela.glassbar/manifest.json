@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.guiestrela.glassbar",
+  "name": "Glass Bar",
+  "version": "1.1.0",
+  "author": "Guiestrela",
+  "license": "MIT",
+  "description": "A theme-aware frosted-glass Omarchy bar with secure custom module paths and live font support.",
+  "kinds": [
+    "bar"
+  ],
+  "entryPoints": {
+    "bar": "Bar.qml"
+  }
+}

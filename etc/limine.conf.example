@@ -1,0 +1,41 @@
+# ==============================================================================
+# Limine Bootloader Configuration (Bare Metal / UEFI & BIOS)
+# Place this at /boot/limine/limine.conf or /boot/limine.conf
+# ==============================================================================
+
+timeout: 5
+default_entry: 1
+graphics: yes
+interface_branding: Omarchy Desktop (Limine)
+interface_branding_colour: 2
+
+# ------------------------------------------------------------------------------
+# 1. Main Linux Boot Entry
+# ------------------------------------------------------------------------------
+/Omarchy Linux
+    protocol: linux
+    # Path is relative to the boot partition or ESP:
+    kernel_path: boot():/vmlinuz-linux
+    # If on Fedora: kernel_path: boot():/vmlinuz-$(uname -r)
+    initrd_path: boot():/initramfs-linux.img
+    # Optional intel/amd microcode (uncomment if installed):
+    # initrd_path: boot():/intel-ucode.img
+    # initrd_path: boot():/amd-ucode.img
+    # Replace UUID with your root filesystem UUID (run: sudo blkid):
+    kernel_cmdline: root=UUID=YOUR_ROOT_UUID rw quiet splash
+
+# ------------------------------------------------------------------------------
+# 2. Fallback / Recovery Boot Entry
+# ------------------------------------------------------------------------------
+/Omarchy Linux (Fallback initramfs)
+    protocol: linux
+    kernel_path: boot():/vmlinuz-linux
+    initrd_path: boot():/initramfs-linux-fallback.img
+    kernel_cmdline: root=UUID=YOUR_ROOT_UUID rw
+
+# ------------------------------------------------------------------------------
+# 3. Windows Boot Manager (Chainload if dual-booting)
+# ------------------------------------------------------------------------------
+# /Windows 11
+#     protocol: efi_chainload
+#     image_path: boot():/EFI/Microsoft/Boot/bootmgfw.efi

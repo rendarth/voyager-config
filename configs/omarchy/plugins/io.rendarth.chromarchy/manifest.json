@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "id": "io.rendarth.chromarchy",
+  "name": "Chromarchy",
+  "version": "1.0.0",
+  "author": "rendarth",
+  "license": "MIT",
+  "description": "Theme-aware Wallhaven wallpaper fetcher and rotator with color matching",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Chromarchy",
+    "description": "Fetch and rotate Wallhaven wallpapers matched to your theme colors",
+    "category": "Wallpaper",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "colorMode": "matching",
+      "colorKeys": [
+        "accent",
+        "background"
+      ],
+      "keywords": "",
+      "category": "general",
+      "purity": "sfw",
+      "fetchMode": "prefetch",
+      "prefetchCount": 10,
+      "interval": 1800,
+      "multiMonitor": "same",
+      "saveBehavior": "rotate",
+      "allowDuplicates": false,
+      "maxScore": 0
+    },
+    "schema": [
+      {
+        "key": "colorMode",
+        "type": "string",
+        "label": "Color Mode"
+      },
+      {
+        "key": "colorKeys",
+        "type": "array",
+        "label": "Theme Colors"
+      },
+      {
+        "key": "keywords",
+        "type": "string",
+        "label": "Keywords"
+      },
+      {
+        "key": "category",
+        "type": "string",
+        "label": "Wallhaven Category"
+      },
+      {
+        "key": "purity",
+        "type": "string",
+        "label": "Content Filter"
+      },
+      {
+        "key": "fetchMode",
+        "type": "string",
+        "label": "Fetch Mode"
+      },
+      {
+        "key": "prefetchCount",
+        "type": "number",
+        "label": "Pre-fetch Count"
+      },
+      {
+        "key": "interval",
+        "type": "number",
+        "label": "Rotation Interval"
+      },
+      {
+        "key": "multiMonitor",
+        "type": "string",
+        "label": "Multi-Monitor"
+      },
+      {
+        "key": "saveBehavior",
+        "type": "string",
+        "label": "Save Behavior"
+      },
+      {
+        "key": "allowDuplicates",
+        "type": "boolean",
+        "label": "Allow Duplicates"
+      },
+      {
+        "key": "maxScore",
+        "type": "number",
+        "label": "Harmony Score Threshold"
+      }
+    ]
+  }
+}

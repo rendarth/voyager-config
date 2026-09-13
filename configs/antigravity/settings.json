@@ -1,0 +1,26 @@
+{
+  "allowNonWorkspaceAccess": true,
+  "colorScheme": "tokyo night",
+  "enableTelemetry": false,
+  "model": "Gemini 3.7 Flash (Medium)",
+  "permissions": {
+    "allow": [
+      "read_file(*)",
+      "write_file(*)",
+      "command(*)",
+      "read_url(*)",
+      "execute_url(*)",
+      "mcp(*)",
+      "unsandboxed(*)"
+    ],
+    "ask": [
+      "command(sudo *)",
+      "command(pkexec *)",
+      "command(su *)",
+      "command(doas *)"
+    ]
+  },
+  "trustedWorkspaces": [
+    "/home/pat"
+  ]
+}

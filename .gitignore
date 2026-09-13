@@ -1,0 +1,15 @@
+# build / local tooling
+.tools/
+dist/
+output/
+
+# editor & os cruft
+.DS_Store
+*.swp
+*~
+
+# backup snapshots are regenerated per-run
+snapshots/arch-packages.txt
+
+# test sandbox
+test/tmp/

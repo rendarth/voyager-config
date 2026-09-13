@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "zakarch.borders",
+  "name": "Border Studio",
+  "version": "1.0.0",
+  "author": "zakarch",
+  "license": "MIT",
+  "description": "Choose window border palettes, rounding, spacing, gradients, and automatic color cycling.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Border Studio",
+    "description": "Window border colors, shine, rounding, spacing, and color cycling",
+    "category": "Appearance",
+    "defaultSection": "right",
+    "allowMultiple": false
+  }
+}

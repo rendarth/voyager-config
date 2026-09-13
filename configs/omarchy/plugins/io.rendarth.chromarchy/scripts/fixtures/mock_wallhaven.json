@@ -1,0 +1,31 @@
+{
+  "data": [
+    {
+      "id": "mock01",
+      "url": "https://wallhaven.cc/w/mock01",
+      "path": "https://w.wallhaven.cc/full/mo/wallhaven-mock01.jpg",
+      "resolution": "3840x2160",
+      "colors": ["#1a1e1e", "#5a7a7a", "#4a6a4a", "#b5b8a9", "#556060"]
+    },
+    {
+      "id": "mock02",
+      "url": "https://wallhaven.cc/w/mock02",
+      "path": "https://w.wallhaven.cc/full/mo/wallhaven-mock02.jpg",
+      "resolution": "2560x1440",
+      "colors": ["#ff0000", "#00ff00", "#0000ff", "#ffffff", "#000000"]
+    },
+    {
+      "id": "mock03",
+      "url": "https://wallhaven.cc/w/mock03",
+      "path": "https://w.wallhaven.cc/full/mo/wallhaven-mock03.jpg",
+      "resolution": "1920x1080",
+      "colors": ["#5a7a7a", "#7a5a5a", "#252b2b", "#8a8f82", "#141717"]
+    }
+  ],
+  "meta": {
+    "current_page": 1,
+    "last_page": 1,
+    "per_page": 3,
+    "total": 3
+  }
+}

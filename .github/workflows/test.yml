@@ -1,0 +1,73 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Setup bats
+        run: make setup-test
+      - name: Lint
+        run: make lint
+      - name: Bats (repo-tree, lib-common)
+        run: make test
+
+  verify-tree:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Canonical tree assertions
+        run: bash scripts/verify/verify-session.sh --repo
+
+  matrix-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [debian:12, ubuntu:24.04, archlinux, fedora:42, alpine:3.21]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Smoke ${{ matrix.image }}
+        env:
+          SMOKE_IMG: ${{ matrix.image }}
+        run: |
+          docker run --rm -e SMOKE_IMG="$SMOKE_IMG" -v "$PWD:/repo:ro" "$SMOKE_IMG" bash -euo pipefail -c '
+            set -Eeuo pipefail
+            export HOME=/smoke-home
+            export VOYAGER_ROOT=/repo
+            rm -rf /smoke-home; mkdir -p /smoke-home
+
+            echo ">> bash -n"
+            while IFS= read -r -d "" f; do bash -n "$f"; done < <(find /repo -name "*.sh" -not -path "*/.git/*" -not -path "*/.tools/*" -print0)
+
+            echo ">> configs stage (portable path)"
+            bash /repo/bootstrap.sh --stage configs --yes
+
+            echo ">> spot checks"
+            test -f /smoke-home/.config/shell/aliases
+            test -f /smoke-home/.config/opencode/opencode.json
+            test -d /smoke-home/.config/environment.d
+            test -x /smoke-home/.local/bin/omarchy-agent
+            test -f /smoke-home/.config/starship.toml
+
+            echo ">> self-fetch (patch: master artifact) [best-effort]"
+            ( HOME=/smoke-fetch bash <<"SPIN"
+               set -Eeuo pipefail
+               mkdir -p /smoke-fetch
+               curl -fsSL "https://raw.githubusercontent.com/rendarth/voyager-config/master/spin.sh" -o /tmp/spin.sh 2>/dev/null || exit 0
+               chmod +x /tmp/spin.sh
+               bash /tmp/spin.sh --no-verify --stage configs
+SPIN
+            ) >/tmp/sf.log 2>&1 && echo "  self-fetch PASS" || { echo "  self-fetch skipped:"; tail -3 /tmp/sf.log; }
+
+            echo ">> repo-tree verify"
+            bash /repo/scripts/verify/verify-session.sh --repo
+            echo "PASS: $SMOKE_IMG"
+          '

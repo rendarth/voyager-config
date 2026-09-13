@@ -1,0 +1,8 @@
+# Example /etc/fstab additions for the NTFS game drives.
+# Replace the UUIDs with YOUR OWN (run `sudo blkid` on the VM) before use.
+# The bootstrap installs these paths; edit UUIDs to match. Reference values
+# from the original Omarchy machine are shown commented out.
+
+# Windows game drives (NTFS)
+UUID=EC24BA3424BA019E  /mnt/enterprise  ntfs3  uid=1000,gid=1000,noatime,nofail  0 0
+UUID=3410637510633CCC  /mnt/rocinante   ntfs3  uid=1000,gid=1000,noatime,nofail  0 0

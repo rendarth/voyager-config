@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "omarchy-lock-style",
+  "name": "Lock Style",
+  "version": "1.1.0",
+  "author": "MrDemonc",
+  "license": "MIT",
+  "homepage": "https://github.com/MrDemonc/Omarchy-lock-style",
+  "description": "Omarchy lock screen customizer with real-time preview, clock, user profile, dev quotes, MPRIS media, and backup/restore management.",
+  "kinds": [
+    "bar-widget",
+    "service"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "barWidget": "LockStyle.qml",
+    "service": "Service.qml"
+  },
+  "barWidget": {
+    "displayName": "Lock Style",
+    "description": "Customize and preview Omarchy lock screen with clock, PIN box, user profile, dev quotes, and media.",
+    "category": "Appearance",
+    "defaultSection": "right",
+    "allowMultiple": false
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.lock"
+  }
+}

@@ -1,0 +1,78 @@
+#!/bin/bash
+# Omarchy Hook: Sync GTK4 / Libadwaita applications (including Riff) with system theme
+
+theme_name=$(omarchy theme current 2>/dev/null)
+theme_slug=$(echo "$theme_name" | tr '[:upper:]' '[:lower:]' | sed 's/[^[:alnum:]]\+/-/g; s/^-//; s/-$//')
+
+# Locate colors.toml
+colors_file=""
+if [[ -f "$HOME/.config/omarchy/themes/$theme_slug/colors.toml" ]]; then
+  colors_file="$HOME/.config/omarchy/themes/$theme_slug/colors.toml"
+elif [[ -f "/usr/share/omarchy/themes/$theme_slug/colors.toml" ]]; then
+  colors_file="/usr/share/omarchy/themes/$theme_slug/colors.toml"
+fi
+
+if [[ -z "$colors_file" ]]; then
+  exit 0
+fi
+
+# Extract hex values
+get_color() {
+  grep -E "^$1[[:space:]]*=" "$colors_file" | head -n 1 | cut -d '"' -f 2
+}
+
+accent=$(get_color "accent")
+background=$(get_color "background")
+dark_bg=$(get_color "dark_background")
+darker_bg=$(get_color "darker_background")
+lighter_bg=$(get_color "lighter_background")
+foreground=$(get_color "foreground")
+muted=$(get_color "muted")
+
+# Fallbacks if any key is missing
+accent=${accent:-"#82FB9C"}
+background=${background:-"#0B0C16"}
+dark_bg=${dark_bg:-"#080910"}
+darker_bg=${darker_bg:-"#06060c"}
+lighter_bg=${lighter_bg:-"#151828"}
+foreground=${foreground:-"#ddf7ff"}
+muted=${muted:-"#2d3450"}
+
+mkdir -p "$HOME/.config/gtk-4.0" "$HOME/.config/gtk-3.0"
+
+# Generate GTK 4 / Libadwaita CSS
+cat <<EOF > "$HOME/.config/gtk-4.0/gtk.css"
+/* Auto-generated GTK4 CSS by Omarchy theme hook */
+@define-color accent_bg_color ${accent};
+@define-color accent_fg_color ${background};
+@define-color accent_color ${accent};
+
+@define-color window_bg_color ${background};
+@define-color window_fg_color ${foreground};
+
+@define-color view_bg_color ${dark_bg};
+@define-color view_fg_color ${foreground};
+
+@define-color headerbar_bg_color ${darker_bg};
+@define-color headerbar_fg_color ${foreground};
+@define-color headerbar_border_color ${muted};
+
+@define-color sidebar_bg_color ${darker_bg};
+@define-color sidebar_fg_color ${foreground};
+
+@define-color card_bg_color ${lighter_bg};
+@define-color card_fg_color ${foreground};
+
+@define-color popover_bg_color ${lighter_bg};
+@define-color popover_fg_color ${foreground};
+
+@define-color dialog_bg_color ${lighter_bg};
+@define-color dialog_fg_color ${foreground};
+
+window.background {
+    background-color: @window_bg_color;
+    color: @window_fg_color;
+}
+EOF
+
+cp "$HOME/.config/gtk-4.0/gtk.css" "$HOME/.config/gtk-3.0/gtk.css"

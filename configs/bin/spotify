@@ -1,0 +1,12 @@
+#!/bin/bash
+# High-Performance Spotify Launcher Wrapper
+
+FLAGS=(
+  --disable-crash-reporter
+  --enable-low-end-device-mode
+  --enable-gpu-rasterization
+  --enable-zero-copy
+  --ignore-gpu-blocklist
+)
+
+exec /opt/spotify/spotify "${FLAGS[@]}" "$@"

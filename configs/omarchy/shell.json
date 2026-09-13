@@ -1,0 +1,132 @@
+{
+  "bar": {
+    "centerAnchor": "omarchy.clock",
+    "layout": {
+      "center": [
+        {
+          "id": "omarchy.indicators"
+        },
+        {
+          "id": "omarchy.clock",
+          "format": "dddd h:mm AP",
+          "formatAlt": "d MMMM 'W'ww yyyy",
+          "verticalFormat": "HH\n—\nmm"
+        },
+        {
+          "id": "omarchy.keyboard-layout"
+        },
+        {
+          "id": "omarchy.weather"
+        },
+        {
+          "id": "omarchy.system-update"
+        }
+      ],
+      "left": [
+        {
+          "id": "omarchy.menu"
+        },
+        {
+          "id": "omarchy.workspaces"
+        }
+      ],
+      "right": [
+        {
+          "id": "omarchy.tray"
+        },
+        {
+          "id": "paulie420.vpn",
+          "openvpn": [
+            {
+              "label": "PIA California",
+              "unit": "openvpn-client@us_california",
+              "iface": "tun0"
+            },
+            {
+              "label": "PIA Las Vegas",
+              "unit": "openvpn-client@us_las_vegas",
+              "iface": "tun0"
+            },
+            {
+              "label": "PIA New Mexico",
+              "unit": "openvpn-client@us_new_mexico",
+              "iface": "tun0"
+            },
+            {
+              "label": "PIA Salt Lake City",
+              "unit": "openvpn-client@us_salt_lake_city",
+              "iface": "tun0"
+            },
+            {
+              "label": "PIA London",
+              "unit": "openvpn-client@uk_london",
+              "iface": "tun0"
+            },
+            {
+              "label": "PIA Amsterdam",
+              "unit": "openvpn-client@netherlands",
+              "iface": "tun0"
+            },
+            {
+              "label": "PIA Tokyo",
+              "unit": "openvpn-client@jp_tokyo",
+              "iface": "tun0"
+            },
+            {
+              "label": "PIA Johannesburg",
+              "unit": "openvpn-client@south_africa",
+              "iface": "tun0"
+            },
+            {
+              "label": "PIA Sydney",
+              "unit": "openvpn-client@au_sydney",
+              "iface": "tun0"
+            }
+          ]
+        },
+        {
+          "id": "io.github.elevate08.qs-bitwarden-cli",
+          "pinUnlock": true,
+          "autoLockMinutes": 60,
+          "closeOnCopy": false
+        },
+        {
+          "id": "omarchy.agents"
+        },
+        {
+          "id": "omarchy.bluetooth"
+        },
+        {
+          "id": "omarchy.network"
+        },
+        {
+          "id": "omarchy.audio"
+        },
+        {
+          "id": "omarchy.monitor"
+        },
+        {
+          "id": "omarchy.power"
+        }
+      ]
+    },
+    "position": "top",
+    "transparent": true
+  },
+  "idle": {
+    "lock": 999999999,
+    "screensaver": 150
+  },
+  "plugins": [
+    {
+      "id": "io.github.xadacka.window-switcher"
+    },
+    {
+      "id": "io.github.danbosscher.fullscreen-workspace"
+    },
+    {
+      "id": "zzwong.stage"
+    }
+  ],
+  "version": 1
+}

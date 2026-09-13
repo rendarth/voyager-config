@@ -1,0 +1,97 @@
+#!/bin/bash
+
+# omarchy:summary=Open a searchable list of open windows and focus the one picked
+# omarchy:args=[]
+
+set -euo pipefail
+
+selection_file=$(mktemp)
+done_file=$(mktemp)
+rm -f "$done_file"
+trap 'rm -f "$selection_file" "$done_file"' EXIT
+
+clients_json=$(hyprctl clients -j)
+
+# Skip the currently focused window (focusHistoryID 0) — picking it would be a no-op.
+mapfile -t rows < <(jq -r '
+  sort_by(.focusHistoryID) | .[] |
+  select(.mapped == true and .focusHistoryID > 0) |
+  [.address,
+   (if (.title // "") != "" then .title elif (.initialTitle // "") != "" then .initialTitle else "(untitled)" end),
+   (.class // ""),
+   .workspace.name] | @tsv
+' <<<"$clients_json")
+
+if (( ${#rows[@]} == 0 )); then
+  exit 0
+fi
+
+# Nerd Font glyphs (FontAwesome block, which JetBrainsMono Nerd Font — the
+# menu's font — carries in full) keyed off common window classes. Falls back
+# to a generic window glyph for anything unrecognized.
+icon_for_class() {
+  case "${1,,}" in
+    *ghostty*|*alacritty*|*kitty*|*foot*|*wezterm*|*xterm*|*konsole*|*terminal*)
+      printf '%s' $'' ;;                                   # nf-fa-terminal
+    *firefox*|*librewolf*|*floorp*|*zen-browser*|*waterfox*)
+      printf '%s' $'' ;;                                   # nf-fa-firefox
+    *chromium*|*chrome*|*vivaldi*|*brave*|*edge*|*opera*)
+      printf '%s' $'' ;;                                   # nf-fa-chrome
+    *code*|*cursor*|*sublime*|*jetbrains*|*idea*|*pycharm*|*webstorm*|*zed*|*vim*|*emacs*)
+      printf '%s' $'' ;;                                   # nf-fa-code
+    *steam*)
+      printf '%s' $'' ;;                                   # nf-fa-steam
+    *spotify*)
+      printf '%s' $'' ;;                                   # nf-fa-music
+    *vlc*|*mpv*|*celluloid*)
+      printf '%s' $'' ;;                                   # nf-fa-film
+    *gimp*|*inkscape*|*krita*)
+      printf '%s' $'' ;;                                   # nf-fa-image
+    *thunderbird*)
+      printf '%s' $'' ;;                                   # nf-fa-envelope
+    *discord*|*slack*|*telegram*|*signal*|*beeper*)
+      printf '%s' $'' ;;                                   # nf-fa-comments
+    *nautilus*|*thunar*|*pcmanfm*|*dolphin*|*nemo*|*files*)
+      printf '%s' $'' ;;                                   # nf-fa-folder
+    *)
+      printf '%s' $'' ;;                                   # nf-fa-desktop (generic)
+  esac
+}
+
+# cut (not bash read/IFS) because bash's field splitting on tab collapses
+# consecutive delimiters, silently dropping empty fields like a blank title.
+tab=$'\t'
+declare -A address_for
+options=()
+for row in "${rows[@]}"; do
+  address=$(cut -f1 <<<"$row")
+  title=$(cut -f2 <<<"$row")
+  class=$(cut -f3 <<<"$row")
+  workspace=$(cut -f4 <<<"$row")
+  icon=$(icon_for_class "$class")
+  detail="Workspace $workspace"
+  key="${title}${tab}${detail}"
+  [[ -n ${address_for[$key]:-} ]] || address_for["$key"]="$address"
+  options+=("${icon}${tab}${title}${tab}${detail}")
+done
+
+options_json=$(printf '%s\n' "${options[@]}" | jq -R -s -c 'split("\n")[:-1]')
+payload=$(jq -nc \
+  --argjson options "$options_json" \
+  --arg selectionFile "$selection_file" \
+  --arg doneFile "$done_file" \
+  '{mode:"select", prompt:"Switch window", options:$options, selectionFile:$selectionFile, doneFile:$doneFile}')
+
+result=$(omarchy-shell shell summon omarchy.menu "$payload")
+[[ $result == "ok" ]] || exit 1
+
+while [[ ! -e $done_file ]]; do
+  sleep 0.01
+done
+
+[[ -s $selection_file ]] || exit 0
+
+selection=$(<"$selection_file")
+address=${address_for[$selection]:-}
+
+[[ -n $address ]] && hyprctl dispatch "hl.dsp.focus({ window = \"address:$address\" })" >/dev/null

@@ -1,0 +1,40 @@
+#!/bin/bash
+
+# User override for omarchy-default-agent to support AGY
+
+installing=false
+if [[ ${1:-} == "--install" ]]; then
+  installing=true
+  shift
+fi
+
+agent_file="$HOME/.config/omarchy/defaults/agent"
+
+if (($# == 0)); then
+  if [[ -f $agent_file ]]; then
+    read -r agent <"$agent_file"
+  fi
+  [[ -n ${agent:-} ]] && echo "$agent"
+  exit 0
+fi
+
+case "$1" in
+agy | gemini | gemini-cli)
+  agent="agy"
+  mkdir -p "$(dirname "$agent_file")"
+  printf '%s\n' "$agent" >"$agent_file"
+  if [[ $installing == "true" ]]; then
+    printf '\033[2J\033[3J\033[H'
+    exec omarchy-agent --inline
+  else
+    exec omarchy-agent
+  fi
+  ;;
+*)
+  if [[ $installing == "true" ]]; then
+    exec /usr/share/omarchy/bin/omarchy-default-agent --install "$@"
+  else
+    exec /usr/share/omarchy/bin/omarchy-default-agent "$@"
+  fi
+  ;;
+esac

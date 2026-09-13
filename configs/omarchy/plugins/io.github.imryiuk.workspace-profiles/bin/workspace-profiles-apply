@@ -1,0 +1,871 @@
+#!/bin/bash
+
+# Launches a Workspace Profiles profile: opens each workspace's preset apps and
+# rebuilds the tiling layout they were arranged into.
+#
+# The layout half is the interesting part. Hyprland's dwindle layout can only
+# ever split one existing window in two, so a saved tree is rebuilt top-down:
+# for each split, the window already filling that region is focused, a preselect
+# layout message aims the next window at the chosen side, and the app is
+# launched into it. lib/plan.jq turns a tree into that ordered step list.
+#
+# Split ratios are set immediately after each split rather than in a pass at the
+# end: at that moment each half is a single window, so a resize lands on exactly
+# that split. Later, once the halves have been subdivided, the same resize would
+# be absorbed by the innermost split instead.
+
+set -uo pipefail
+
+readonly SELF_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly PLAN_JQ="$SELF_DIR/../lib/plan.jq"
+readonly GLYPH="󰙀"
+
+STORE="${WORKSPACE_PROFILES_STORE:-$HOME/.config/omarchy/workspace-profiles/profiles.json}"
+
+# Scratch space for one login. XDG_RUNTIME_DIR is the right home for it: it is
+# already private to this user and wiped at logout, which is exactly the
+# lifetime the once-per-login marker wants.
+#
+# The fallback is not a shared /tmp/omarchy-workspace-profiles. On a machine
+# with more than one account that is a name anybody can create first and point
+# wherever they like, and this script would then write its marker through their
+# symlink. It is a per-uid directory instead, and ensure_marker_dir below
+# refuses to use one that is a symlink or is not ours.
+if [[ -n ${XDG_RUNTIME_DIR:-} ]]; then
+  MARKER_DIR="$XDG_RUNTIME_DIR/omarchy-workspace-profiles"
+else
+  MARKER_DIR="${TMPDIR:-/tmp}/omarchy-workspace-profiles-$(id -u)"
+fi
+MARKER="$MARKER_DIR/applied"
+RESULT="$MARKER_DIR/test-result.json"
+
+# Ceilings on what this run will read or wait for. No real profile and no
+# healthy compositor comes near any of them; they are here so that a store or a
+# hyprctl that has gone wrong ends this run instead of hanging a login on it.
+readonly MAX_STORE_BYTES="${WORKSPACE_PROFILES_MAX_STORE_BYTES:-1048576}"
+readonly MAX_HYPRCTL_BYTES="${WORKSPACE_PROFILES_MAX_HYPRCTL_BYTES:-8388608}"
+readonly HYPRCTL_TIMEOUT="${WORKSPACE_PROFILES_HYPRCTL_TIMEOUT:-5}"
+
+# How old the compositor may be for a --boot run to still count as a login, in
+# seconds. The marker below stops a second boot run inside one session, but it
+# cannot stop the first, and the service that fires it starts afresh every time
+# the shell does: enabling the plugin, or an omarchy-restart-shell, would build
+# the whole profile in the middle of whatever you were already doing. So a boot
+# run also has to be young — the Hyprland it is talking to must have started
+# moments ago, not this morning.
+BOOT_WINDOW="${WORKSPACE_PROFILES_BOOT_WINDOW:-120}"
+
+# A special workspace is only rendered while it is toggled open, so a window
+# that opens on one never reaches the screen. That is what makes a test run
+# invisible: the apps really start, really map a window, and are really closed,
+# without the desktop the user is looking at changing at all.
+readonly TEST_WORKSPACE="special:workspace-profiles-test"
+
+profile_id=""
+boot_mode=0
+dry_run=0
+test_mode=0
+notify=1
+window_timeout=15
+
+usage() {
+  cat >&2 <<'EOF'
+Usage: workspace-profiles-apply [options]
+
+  --profile <id>   profile to apply (default: the store's activeProfile)
+  --boot           login run: only within the first $BOOT_WINDOW seconds of a
+                   Hyprland session, once per session, and only into workspaces
+                   that are still empty
+  --dry-run        print what would happen, touch nothing
+  --test           check every app starts, out of sight, then clean up
+  --no-notify      no desktop notifications
+  --store <path>   profiles.json to read (default: the plugin's store)
+  --timeout <sec>  how long to wait for a launched window (default: 15)
+EOF
+  exit 2
+}
+
+while (($#)); do
+  case "$1" in
+    --profile) profile_id="${2:-}"; shift 2 || usage ;;
+    --store) STORE="${2:-}"; shift 2 || usage ;;
+    --timeout) window_timeout="${2:-}"; shift 2 || usage ;;
+    --boot) boot_mode=1; shift ;;
+    --dry-run) dry_run=1; shift ;;
+    --test) test_mode=1; shift ;;
+    --no-notify) notify=0; shift ;;
+    -h | --help) usage ;;
+    *) echo "workspace-profiles-apply: unknown argument '$1'" >&2; usage ;;
+  esac
+done
+
+# ---------------------------------------------------------------- plumbing
+
+log() { printf '%s\n' "$*" >&2; }
+
+# hyprctl, bounded. Every query below sits on the path a login takes, so a
+# compositor that has stopped answering its socket would leave the whole login
+# parked on one of them. The byte cap is for the JSON queries: jq reads them
+# from a pipe, and a reply that never ended would be read until memory ran out.
+if command -v timeout >/dev/null 2>&1; then
+  hypr() { timeout "$HYPRCTL_TIMEOUT" hyprctl "$@"; }
+else
+  hypr() { hyprctl "$@"; }
+fi
+
+hypr_json() { hypr "$@" 2>/dev/null | head -c "$MAX_HYPRCTL_BYTES"; }
+
+# Values spliced into a hyprctl dispatch or into a file path are checked against
+# the shape they are meant to have, rather than escaped into place. A workspace
+# key, a window address and a desktop entry id are all short, boring tokens in
+# every profile this plugin writes; one that is not is a store that has been
+# edited into something unexpected, and the honest answer is to skip it rather
+# than to guess what it meant.
+is_workspace_id() { [[ $1 =~ ^[0-9]+$ ]]; }
+is_address() { [[ $1 =~ ^0x[0-9a-fA-F]+$ ]]; }
+# The spec's own shape for a desktop file id, which also keeps a `/` out of the
+# path desktop_file_for builds from it.
+is_app_id() { [[ $1 =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]; }
+
+# The runtime directory, made ours and confirmed to still be ours. `mkdir -m`
+# sets the mode only on a directory it creates, so one that already exists is
+# re-checked instead of trusted.
+ensure_marker_dir() {
+  if [[ -L $MARKER_DIR ]]; then
+    log "$MARKER_DIR is a symlink, refusing to use it"
+    return 1
+  fi
+  mkdir -p -m 700 "$MARKER_DIR" 2>/dev/null || return 1
+  if [[ ! -d $MARKER_DIR || -L $MARKER_DIR ]]; then
+    log "$MARKER_DIR is not a directory"
+    return 1
+  fi
+  if [[ ! -O $MARKER_DIR ]]; then
+    log "$MARKER_DIR is not owned by you, refusing to use it"
+    return 1
+  fi
+  chmod 700 "$MARKER_DIR" 2>/dev/null
+  return 0
+}
+
+notify_send() {
+  ((notify)) || return 0
+  ((dry_run)) && { log "notify: $1 — ${2:-}"; return 0; }
+  command -v omarchy-notification-send >/dev/null 2>&1 || return 0
+  local -a replace=()
+  # Land on the progress toast if one is up, so the build ends on the same
+  # notification it was reporting into rather than stacking a second.
+  [[ -n ${progress_id:-} ]] && replace=(-r "$progress_id")
+  omarchy-notification-send -g "$GLYPH" "${replace[@]}" "$1" "${2:-}" >/dev/null 2>&1 || true
+}
+
+# One toast that updates in place as the build moves from app to app. A profile
+# opening eight windows takes a few seconds per app, and without this the
+# desktop just sits there — someone watching cannot tell a slow launch from
+# nothing happening. The id from the first send is reused to replace it.
+progress_id=""
+notify_step() {
+  ((notify)) || return 0
+  ((dry_run)) && { log "step: $1 — ${2:-}"; return 0; }
+  command -v omarchy-notification-send >/dev/null 2>&1 || return 0
+  local id
+  id="$(omarchy-notification-send -g "$GLYPH" -r "${progress_id:-0}" -p "$1" "${2:-}" 2>/dev/null || true)"
+  [[ $id =~ ^[0-9]+$ ]] && progress_id="$id"
+}
+
+# The desktop entry's Name, for a line a person reads; the id if there is none.
+app_display_name() {
+  local file name
+  file="$(desktop_file_for "$1")" || { printf '%s' "$1"; return 0; }
+  name="$(awk '
+    /^\[Desktop Entry\]/ { in_entry = 1; next }
+    /^\[/                { in_entry = 0 }
+    in_entry && /^Name=/ { sub(/^Name=/, ""); print; exit }
+  ' "$file")"
+  printf '%s' "${name:-$1}"
+}
+
+# Seconds since the compositor started, or nothing if that cannot be read — in
+# which case the caller carries on rather than refusing to open a login.
+compositor_age() {
+  local pid age
+  pid="$(pgrep -x Hyprland 2>/dev/null | head -n1)"
+  [[ -n $pid ]] || return 0
+  age="$(ps -o etimes= -p "$pid" 2>/dev/null | tr -d '[:space:]')"
+  [[ $age =~ ^[0-9]+$ ]] || return 0
+  printf '%s' "$age"
+}
+
+die() {
+  log "workspace-profiles: $1"
+  notify_send "Workspace Profiles" "$1"
+  exit 1
+}
+
+dispatch() {
+  if ((dry_run)); then
+    log "  dispatch  $1"
+    return 0
+  fi
+  hypr dispatch "$1" >/dev/null 2>&1
+}
+
+# Addresses of the windows currently on a workspace, one per line.
+clients_on() {
+  is_workspace_id "$1" || return 0
+  hypr_json clients -j | jq -r --argjson ws "$1" \
+    '.[] | select(.workspace.id == $ws) | .address'
+}
+
+# Addresses of the windows on a workspace named rather than numbered — special
+# workspaces have negative, assigned-on-demand ids.
+clients_on_named() {
+  hypr_json clients -j | jq -r --arg name "$1" \
+    '.[] | select(.workspace.name == $name) | .address'
+}
+
+# Every window in the session, not just one workspace.
+all_addresses() {
+  hypr_json clients -j | jq -r '.[].address'
+}
+
+workspace_name_of() {
+  is_address "$1" || return 0
+  hypr_json clients -j | jq -r --arg a "$1" \
+    '.[] | select(.address == $a) | .workspace.name'
+}
+
+close_window() {
+  is_address "$1" || return 0
+  hypr dispatch "hl.dsp.window.close({ window = \"address:$1\" })" >/dev/null 2>&1
+}
+
+# "<width> <height>" for one window, empty if it is gone.
+geometry_of() {
+  is_address "$1" || return 0
+  hypr_json clients -j | jq -r --arg a "$1" \
+    '.[] | select(.address == $a) | "\(.size[0]) \(.size[1])"'
+}
+
+# ------------------------------------------------------------------ launch
+
+# Absolute path of a desktop entry, searched the way the XDG spec orders them.
+#
+# A symlinked entry is followed on purpose: exported Flatpak and Snap
+# applications are symlinks into their own trees, and refusing those would hide
+# half of an ordinary desktop's apps. What is not followed is the id — it has to
+# look like a desktop file id before it is pasted into a path, so a stored `app`
+# cannot walk out of the applications directories with a `/`.
+desktop_file_for() {
+  local id="$1" dir
+  is_app_id "$id" || return 1
+  local -a dirs=("$HOME/.local/share/applications") xdg=()
+  IFS=: read -ra xdg <<<"${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+  for dir in "${xdg[@]}"; do
+    [[ -n $dir ]] && dirs+=("$dir/applications")
+  done
+  for dir in "${dirs[@]}"; do
+    [[ -f "$dir/$id.desktop" ]] && { printf '%s' "$dir/$id.desktop"; return 0; }
+  done
+  return 1
+}
+
+# The raw Exec value of a desktop entry. Only the [Desktop Entry] group counts —
+# an action group further down has its own Exec.
+desktop_exec() {
+  local file
+  file="$(desktop_file_for "$1")" || return 1
+  awk '
+    /^\[Desktop Entry\]/ { in_entry = 1; next }
+    /^\[/                { in_entry = 0 }
+    in_entry && /^Exec=/ { sub(/^Exec=/, ""); print; exit }
+  ' "$file"
+}
+
+# Split an Exec value into argv, by the rules in the Desktop Entry
+# Specification.
+#
+# Those are not the shell's rules, and the difference is the whole reason this
+# is done by hand. The spec quotes with double quotes and gives meaning to
+# exactly four escapes inside them — \" \\ \` \$ — and to nothing else. A
+# `$(...)`, a backtick, a `;`, a `|`, a `>` or a `*` in an Exec value is an
+# ordinary character that the app is supposed to receive. Handing the line to
+# the shell instead runs them, which both mis-launches an app whose Exec
+# legitimately contains one and turns a desktop file into a script.
+#
+# Field codes expand to nothing here: this opens an app, it does not hand it a
+# file or a URL, so %f and friends have nothing to stand for. An argument that
+# was nothing but a field code disappears with it, so `foo %U` becomes `foo`.
+#
+# Appends to LAUNCH_ARGV. Returns 1 on an unterminated quote.
+parse_exec_into_argv() {
+  local line="$1"
+  local n=${#line} i=0 c nxt closed
+  local cur="" started=0 code=0
+
+  while ((i < n)); do
+    c="${line:i:1}"
+
+    if [[ $c == " " || $c == $'\t' ]]; then
+      if ((started)) && { [[ -n $cur ]] || ((code == 0)); }; then
+        LAUNCH_ARGV+=("$cur")
+      fi
+      cur=""; started=0; code=0
+      i=$((i + 1))
+      continue
+    fi
+
+    started=1
+    case "$c" in
+      '"')
+        i=$((i + 1)); closed=0
+        while ((i < n)); do
+          c="${line:i:1}"
+          if [[ $c == '\' ]]; then
+            nxt="${line:i+1:1}"
+            case "$nxt" in
+              '"' | '\' | '$' | '`') cur+="$nxt"; i=$((i + 2)); continue ;;
+            esac
+            cur+='\'; i=$((i + 1)); continue
+          fi
+          if [[ $c == '"' ]]; then closed=1; i=$((i + 1)); break; fi
+          cur+="$c"; i=$((i + 1))
+        done
+        ((closed)) || return 1
+        ;;
+      '%')
+        nxt="${line:i+1:1}"
+        if [[ $nxt == '%' ]]; then
+          cur+='%'; i=$((i + 2))
+        elif [[ $nxt == [fFuUdDnNickvm] ]]; then
+          code=1; i=$((i + 2))
+        else
+          cur+='%'; i=$((i + 1))
+        fi
+        ;;
+      *)
+        cur+="$c"; i=$((i + 1))
+        ;;
+    esac
+  done
+
+  if ((started)) && { [[ -n $cur ]] || ((code == 0)); }; then
+    LAUNCH_ARGV+=("$cur")
+  fi
+  return 0
+}
+
+# Split the arguments typed into a pane's argument box.
+#
+# This is a person writing a command line, so quotes and backslashes mean what
+# they mean in a terminal: `--title "two words"` is one argument. Nothing else
+# does. There is no expansion, no substitution, no globbing and no redirection,
+# because the box holds arguments for one app and was never a place to put a
+# second command.
+#
+# Appends to LAUNCH_ARGV. Returns 1 on an unterminated quote.
+parse_args_into_argv() {
+  local line="$1"
+  local n=${#line} i=0 c nxt closed
+  local cur="" started=0
+
+  while ((i < n)); do
+    c="${line:i:1}"
+    case "$c" in
+      " " | $'\t')
+        ((started)) && LAUNCH_ARGV+=("$cur")
+        cur=""; started=0; i=$((i + 1))
+        ;;
+      "'")
+        started=1; i=$((i + 1)); closed=0
+        while ((i < n)); do
+          c="${line:i:1}"
+          if [[ $c == "'" ]]; then closed=1; i=$((i + 1)); break; fi
+          cur+="$c"; i=$((i + 1))
+        done
+        ((closed)) || return 1
+        ;;
+      '"')
+        started=1; i=$((i + 1)); closed=0
+        while ((i < n)); do
+          c="${line:i:1}"
+          if [[ $c == '\' ]]; then
+            nxt="${line:i+1:1}"
+            case "$nxt" in
+              '"' | '\') cur+="$nxt"; i=$((i + 2)); continue ;;
+            esac
+            cur+='\'; i=$((i + 1)); continue
+          fi
+          if [[ $c == '"' ]]; then closed=1; i=$((i + 1)); break; fi
+          cur+="$c"; i=$((i + 1))
+        done
+        ((closed)) || return 1
+        ;;
+      '\')
+        started=1
+        nxt="${line:i+1:1}"
+        if [[ -n $nxt ]]; then cur+="$nxt"; i=$((i + 2)); else cur+='\'; i=$((i + 1)); fi
+        ;;
+      *)
+        started=1; cur+="$c"; i=$((i + 1))
+        ;;
+    esac
+  done
+
+  ((started)) && LAUNCH_ARGV+=("$cur")
+  return 0
+}
+
+# argv written as a command line that a shell splits back into exactly these
+# words. Single quotes, because they are the one quoting a shell does nothing
+# inside; an embedded quote is closed, escaped and reopened.
+shell_quote() {
+  local out="" word
+  for word in "$@"; do
+    out+=" '${word//\'/\'\\\'\'}'"
+  done
+  printf '%s' "${out# }"
+}
+
+# Fills LAUNCH_ARGV with the command for one pane.
+#
+# With no arguments this is the same gtk-launch call Omarchy's own launcher
+# makes, which handles entries whose Exec is awkward to reconstruct. With
+# arguments we go through the Exec line instead: gtk-launch treats what follows
+# the desktop id as files to open, so `alacritty -e btop` would arrive as two
+# filenames rather than a flag and its value.
+build_argv() {
+  local id="$1" args="${2:-}"
+  LAUNCH_ARGV=()
+
+  if ! is_app_id "$id"; then
+    log "  ! '$id' is not a desktop entry id, skipping it"
+    return 1
+  fi
+
+  if [[ -z $args ]]; then
+    LAUNCH_ARGV=(gtk-launch "$id.desktop")
+    return 0
+  fi
+
+  local exec_line
+  if ! exec_line="$(desktop_exec "$id")" || [[ -z $exec_line ]]; then
+    log "  ! no desktop entry for $id, falling back to gtk-launch"
+    LAUNCH_ARGV=(gtk-launch "$id.desktop")
+    return 0
+  fi
+
+  if ! parse_exec_into_argv "$exec_line"; then
+    log "  ! could not parse Exec for $id, falling back to gtk-launch"
+    LAUNCH_ARGV=(gtk-launch "$id.desktop")
+    return 0
+  fi
+
+  if ! parse_args_into_argv "$args"; then
+    log "  ! unbalanced quotes in the arguments for $id, launching without them"
+    LAUNCH_ARGV=(gtk-launch "$id.desktop")
+    return 0
+  fi
+
+  # An Exec of nothing but field codes leaves no command to run.
+  ((${#LAUNCH_ARGV[@]})) || LAUNCH_ARGV=(gtk-launch "$id.desktop")
+  return 0
+}
+
+launch_app() {
+  build_argv "$1" "${2:-}" || return 1
+
+  if ((dry_run)); then
+    log "  launch    $(shell_quote uwsm-app -- "${LAUNCH_ARGV[@]}")"
+    return 0
+  fi
+
+  # Under uwsm-app so the app lands in app-graphical.slice instead of
+  # inheriting this script's unit, matching how Omarchy launches everything else.
+  setsid -f uwsm-app -- "${LAUNCH_ARGV[@]}" >/dev/null 2>&1
+}
+
+# Launch onto the hidden test workspace. This one goes through Hyprland's own
+# exec rather than setsid, because only Hyprland can tie a workspace rule to the
+# process it spawned — that rule is what keeps the window off the screen.
+launch_app_hidden() {
+  build_argv "$1" "${2:-}" || return 1
+
+  # Hyprland's exec takes a command line rather than an argv, so these words
+  # have to survive one more trip through a shell. Each is quoted for it:
+  # joining them with spaces would let an argument containing one come apart,
+  # and the test would then be testing a command the real launch never runs.
+  local command
+  command="$(shell_quote uwsm-app -- "${LAUNCH_ARGV[@]}")"
+
+  # The command sits inside a Lua long string, which processes no escapes; the
+  # only sequence that could end it early is its own closing bracket. Nothing
+  # is stripped to make it fit — a command that cannot be quoted intact is one
+  # this run declines to launch, rather than one it launches altered.
+  if [[ $command == *"]==]"* ]]; then
+    log "  ! refusing to launch $1: its command cannot be passed safely"
+    return 1
+  fi
+
+  hypr dispatch "hl.dsp.exec_cmd([==[$command]==], { workspace = \"$TEST_WORKSPACE\" })" >/dev/null 2>&1
+}
+
+# Wait for a window to show up on a workspace that was not there before.
+# Prints its address. Polling rather than following socket2 keeps this to jq
+# and hyprctl, and 80ms is well inside the time any app takes to map.
+wait_for_window() {
+  local ws="$1" before="$2" timeout="${3:-$window_timeout}"
+  local deadline=$((SECONDS + timeout)) now new
+
+  while ((SECONDS < deadline)); do
+    if [[ $ws == special:* ]]; then now="$(clients_on_named "$ws")"
+    else now="$(clients_on "$ws")"; fi
+    new="$(comm -13 <(sort <<<"$before") <(sort <<<"$now") 2>/dev/null | head -1)"
+    [[ -n $new ]] && { printf '%s' "$new"; return 0; }
+    sleep 0.08
+  done
+  return 1
+}
+
+# ------------------------------------------------------------------ ratios
+#
+# Nudge a fresh split until the first half takes `ratio` of it. Two passes:
+# Hyprland clamps a resize against the window's own minimum size and against
+# gaps, so the first delta can land short, and measuring again is cheaper than
+# modelling those rules.
+apply_ratio() {
+  local first="$1" second="$2" dir="$3" ratio="$4" pass
+  local fw fh sw sh total target delta
+
+  ((dry_run)) && { log "  ratio     $ratio on $dir split"; return 0; }
+
+  for pass in 1 2; do
+    read -r fw fh <<<"$(geometry_of "$first")"
+    read -r sw sh <<<"$(geometry_of "$second")"
+    [[ -z $fw || -z $sw ]] && return 0
+
+    if [[ $dir == r ]]; then
+      total=$((fw + sw))
+      target="$(awk -v r="$ratio" -v t="$total" 'BEGIN { printf "%d", r * t + 0.5 }')"
+      delta=$((target - fw))
+      ((delta > -2 && delta < 2)) && return 0
+      dispatch "hl.dsp.window.resize({ window = \"address:$first\", x = $delta, y = 0, relative = true })"
+    else
+      total=$((fh + sh))
+      target="$(awk -v r="$ratio" -v t="$total" 'BEGIN { printf "%d", r * t + 0.5 }')"
+      delta=$((target - fh))
+      ((delta > -2 && delta < 2)) && return 0
+      dispatch "hl.dsp.window.resize({ window = \"address:$first\", x = 0, y = $delta, relative = true })"
+    fi
+  done
+}
+
+# Wait for any new window anywhere, and say where it landed.
+#
+# Watching the whole session rather than only the test workspace is what makes
+# the result trustworthy for single-instance apps. Launching Nautilus while
+# Nautilus is running does not start a process that a workspace rule can catch —
+# the running one is asked to open a window, and it opens it wherever the user
+# is. Watching only the hidden workspace would call that a failure when the app
+# started perfectly well.
+wait_for_test_window() {
+  local before="$1" timeout="${2:-10}"
+  local deadline=$((SECONDS + timeout)) now new
+
+  while ((SECONDS < deadline)); do
+    now="$(all_addresses)"
+    new="$(comm -13 <(sort <<<"$before") <(sort <<<"$now") 2>/dev/null | head -1)"
+    [[ -n $new ]] && { printf '%s' "$new"; return 0; }
+    sleep 0.08
+  done
+  return 1
+}
+
+# ---------------------------------------------------------------- testing
+#
+# Answers one question per pane: does this app, with these arguments, actually
+# open a window? Wrong arguments are the failure this catches — a browser given
+# a malformed URL, a terminal given a command that is not installed — and they
+# are exactly the kind that only shows up at the next login otherwise.
+#
+# The layout is not rebuilt. Every app is started on the hidden test workspace,
+# waited for, and closed again, so the desktop the user is looking at never
+# changes and the test can be run mid-session without costing them anything.
+run_test() {
+  local profile="$1" profile_name="$2" workspaces="$3"
+  local ws tree plan op from pane dir ratio app args before addr
+  local ok=0 bad=0
+  local -a opened=() failures=() surfaced=() results=()
+
+  log "testing '$profile_name' out of sight on $TEST_WORKSPACE"
+
+  for ws in $workspaces; do
+    tree="$(jq -c --arg w "$ws" '.workspaces[$w]' <<<"$profile")"
+    [[ -z $tree || $tree == null ]] && continue
+
+    plan="$(jq -r -f "$PLAN_JQ" <<<"$tree" 2>/dev/null)" || continue
+    [[ -z $plan ]] && continue
+
+    while IFS=$'\t' read -r op from pane dir ratio app args; do
+      [[ -z ${op:-} ]] && continue
+
+      before="$(all_addresses)"
+      launch_app_hidden "$app" "$args"
+
+      if addr="$(wait_for_test_window "$before" 10)"; then
+        local where hidden
+        where="$(workspace_name_of "$addr")"
+        if [[ $where == "$TEST_WORKSPACE" ]]; then
+          hidden=true
+        else
+          hidden=false
+          surfaced+=("$app")
+          log "  ok   $app${args:+ $args}  (already running — its window opened on $where)"
+        fi
+
+        opened+=("$addr")
+        results+=("$(jq -nc --arg k "$ws:$pane" --arg a "$app" --argjson hidden "$hidden" \
+          '{key: $k, app: $a, ok: true, hidden: $hidden}')")
+        ((ok++))
+        [[ $hidden == true ]] && log "  ok   $app${args:+ $args}"
+      else
+        results+=("$(jq -nc --arg k "$ws:$pane" --arg a "$app" '{key: $k, app: $a, ok: false, hidden: true}')")
+        failures+=("$app")
+        ((bad++))
+        log "  FAIL $app${args:+ $args}"
+      fi
+    done <<<"$plan"
+  done
+
+  # Only the windows this run opened are closed. Anything else that wandered
+  # onto the test workspace is somebody else's.
+  for addr in ${opened[@]+"${opened[@]}"}; do close_window "$addr"; done
+
+  # The last run's answer, for the panel to read back. Written into the
+  # directory only once it has been confirmed ours, and over a fresh name so a
+  # stale symlink left in there cannot redirect the write.
+  if ensure_marker_dir; then
+    rm -f -- "$RESULT"
+    printf '%s' "$(jq -nc \
+      --arg profile "$(jq -r '.id' <<<"$profile")" \
+      --argjson ok "$ok" --argjson failed "$bad" \
+      --argjson panes "$(printf '%s\n' ${results[@]+"${results[@]}"} | jq -sc '.')" \
+      '{profile: $profile, at: (now | floor), ok: $ok, failed: $failed, panes: $panes}')" >"$RESULT"
+  fi
+
+  local aside=""
+  if ((${#surfaced[@]})); then
+    aside=" $(printf '%s, ' "${surfaced[@]}" | sed 's/, $//') was already running, so its window opened on screen for a moment."
+  fi
+
+  if ((bad == 0)); then
+    notify_send "$profile_name works" "All $ok opened, and the test windows are closed again.$aside"
+  else
+    notify_send "$profile_name: $bad of $((ok + bad)) did not start" \
+      "$(printf '%s, ' "${failures[@]}" | sed 's/, $//') never opened a window. Check the app and its arguments.$aside"
+  fi
+
+  ((bad == 0))
+}
+
+# -------------------------------------------------------------- one workspace
+
+# Walks the step list from plan.jq, keeping a pane path -> window address map so
+# each split can focus the window it is meant to divide.
+build_workspace() {
+  local ws="$1" tree="$2"
+  local -A window_of=()
+  local op from pane dir ratio app args before addr new_addr
+  local launched=0 failed=0
+
+  local plan
+  plan="$(jq -r -f "$PLAN_JQ" <<<"$tree" 2>/dev/null)" || {
+    log "  ! workspace $ws: could not read its layout"
+    return 1
+  }
+  [[ -z $plan ]] && return 0
+
+  log "workspace $ws"
+  dispatch "hl.dsp.focus({ workspace = \"$ws\" })"
+
+  while IFS=$'\t' read -r op from pane dir ratio app args; do
+    [[ -z ${op:-} ]] && continue
+
+    if [[ $op == split ]]; then
+      addr="${window_of[$from]:-}"
+      if [[ -z $addr ]]; then
+        log "  ! no window for pane '$from', skipping the pane it splits"
+        ((failed++))
+        continue
+      fi
+      if ! is_address "$addr" || [[ $dir != r && $dir != d ]]; then
+        log "  ! pane '$from' has no usable split to make, skipping it"
+        ((failed++))
+        continue
+      fi
+      dispatch "hl.dsp.focus({ window = \"address:$addr\" })"
+      dispatch "hl.dsp.layout(\"preselect $dir\")"
+    fi
+
+    notify_step "$profile_name is opening" "$(app_display_name "$app") on workspace $ws…"
+
+    before="$(clients_on "$ws")"
+    launch_app "$app" "$args"
+
+    if ((dry_run)); then
+      window_of[$pane]="dry:$pane"
+      ((launched++))
+      continue
+    fi
+
+    if ! new_addr="$(wait_for_window "$ws" "$before")"; then
+      log "  ! $app never opened a window, continuing without it"
+      ((failed++))
+      # A preselect armed for a window that never arrived stays armed, but every
+      # later split re-arms it before launching, and a seed lands on an empty
+      # workspace where there is nothing to split — so it cannot misplace anything.
+      continue
+    fi
+
+    window_of[$pane]="$new_addr"
+    ((launched++))
+    log "  + $app${args:+ $args}"
+
+    if [[ $op == split ]]; then
+      apply_ratio "${window_of[$from]}" "$new_addr" "$dir" "$ratio"
+    fi
+  done <<<"$plan"
+
+  ((failed)) && log "  workspace $ws: $launched opened, $failed failed"
+  return 0
+}
+
+# ------------------------------------------------------------------- main
+
+command -v hyprctl >/dev/null 2>&1 || die "Hyprland is not running"
+
+# Only a fresh session gets built for you. Every other --boot run — the shell
+# restarting, the plugin being enabled, applyLogin called out of curiosity — is
+# a request to open a dozen windows over the top of a desktop that is already
+# in use, which is not what ticking "open this profile when I log in" asked for.
+if ((boot_mode)); then
+  age="$(compositor_age)"
+  if [[ -n $age ]] && ((age > BOOT_WINDOW)); then
+    log "hyprland has been up ${age}s, this is not a login — nothing to do"
+    exit 0
+  fi
+fi
+
+command -v jq >/dev/null 2>&1 || die "jq is required but not installed"
+[[ -r $PLAN_JQ ]] || die "missing $PLAN_JQ"
+[[ -r $STORE ]] || { log "no profile store at $STORE"; exit 0; }
+# A regular file, and only so much of it. A store that turned out to be a fifo
+# would park a login on this read for as long as nothing wrote to it, and one
+# that has grown past a megabyte stopped being a profile store a long way back.
+[[ -f $STORE ]] || die "the profile store at $STORE is not a regular file"
+
+store="$(head -c "$MAX_STORE_BYTES" -- "$STORE")"
+jq -e . >/dev/null 2>&1 <<<"$store" || die "profiles.json is not valid JSON"
+
+if [[ -z $profile_id ]]; then
+  if ((boot_mode)); then
+    profile_id="$(jq -r '.loginProfile // ""' <<<"$store")"
+    [[ -z $profile_id || $profile_id == null ]] && { log "no login profile set"; exit 0; }
+  else
+    profile_id="$(jq -r '.activeProfile // ""' <<<"$store")"
+    [[ -z $profile_id || $profile_id == null ]] && die "no profile selected"
+  fi
+fi
+
+profile="$(jq -c --arg id "$profile_id" '.profiles[]? | select(.id == $id)' <<<"$store")"
+[[ -z $profile ]] && die "no profile called '$profile_id'"
+
+profile_name="$(jq -r '.name // .id' <<<"$profile")"
+# The profile's sequence is the order the user put the workspaces in, and the
+# first of them is where they are left once everything has opened. A profile
+# written by hand may not have one, so fall back to numeric order.
+workspaces="$(jq -r '
+  (.workspaces | keys) as $configured
+  | (((.sequence // []) | map(tostring)) + ($configured | sort_by(tonumber)))
+  | reduce .[] as $w ([];
+      if ($configured | index($w)) and (index($w) == null) then . + [$w] else . end)
+  | .[]' <<<"$profile" 2>/dev/null)"
+# Workspace keys are the numbers on the workspace row, and they are pasted into
+# a dispatch and compared against hyprctl's numeric ids. Anything else in the
+# store is not a workspace this can build.
+workspaces="$(
+  for ws in $workspaces; do is_workspace_id "$ws" && printf '%s\n' "$ws"; done
+)"
+[[ -z $workspaces ]] && { log "profile '$profile_name' has no workspaces"; exit 0; }
+
+if ((test_mode)); then
+  run_test "$profile" "$profile_name" "$workspaces"
+  exit $?
+fi
+
+# Claimed once there is real work to do, and before any of it happens: a second
+# shell start during the same login — an omarchy-restart-shell, a crash and a
+# respawn — must not open everything a second time. XDG_RUNTIME_DIR is wiped at
+# logout, so the next real login starts over with a clean slate.
+if ((boot_mode)) && ((!dry_run)); then
+  # No usable runtime directory means no marker, and no marker means nothing
+  # stops the next shell start from opening the whole profile again. That is
+  # worse than not opening it, so this is where a boot run stops.
+  ensure_marker_dir || die "cannot use $MARKER_DIR, so a login run cannot be tracked"
+  if ! (set -o noclobber; : >"$MARKER") 2>/dev/null; then
+    log "already applied this session, nothing to do"
+    exit 0
+  fi
+fi
+
+skipped=()
+built=()
+
+for ws in $workspaces; do
+  tree="$(jq -c --arg w "$ws" '.workspaces[$w]' <<<"$profile")"
+  [[ -z $tree || $tree == null ]] && continue
+
+  # A workspace that already has windows can't be built into: the first app is
+  # meant to fill the whole workspace, and every split is measured from there.
+  # Rather than nest the layout inside whatever is already open, leave it alone.
+  if ((!dry_run)) && [[ -n "$(clients_on "$ws")" ]]; then
+    skipped+=("$ws")
+    log "workspace $ws already has windows, leaving it alone"
+    continue
+  fi
+
+  # Announced on the first workspace there is actually something to do on: a
+  # profile whose workspaces are all open already sets nothing up, and saying
+  # so twice over is two notifications for a no-op.
+  ((${#built[@]})) || notify_step "Workspace Profiles" "Setting up your preset spaces…"
+
+  build_workspace "$ws" "$tree"
+  built+=("$ws")
+done
+
+# You end up on the first workspace that was built: it comes first in the
+# sequence because it is the one that matters most, so it is the one to be
+# looking at. If nothing was built — every workspace was already open — then
+# nothing was set up for you to look at, and being thrown across the desktop
+# would be the only thing that happened. You stay where you are.
+if ((${#built[@]})); then
+  dispatch "hl.dsp.focus({ workspace = \"${built[0]}\" })"
+fi
+
+if ((${#skipped[@]} && !${#built[@]})); then
+  if ((${#skipped[@]} == 1)); then
+    notify_send "$profile_name was already open" \
+      "Workspace ${skipped[0]} had windows, so nothing was opened."
+  else
+    notify_send "$profile_name was already open" \
+      "Workspaces ${skipped[*]} had windows, so nothing was opened."
+  fi
+elif ((${#skipped[@]})); then
+  if ((${#skipped[@]} == 1)); then
+    notify_send "$profile_name is ready" "Workspace ${skipped[0]} already had windows and was left alone."
+  else
+    notify_send "$profile_name is ready" "Workspaces ${skipped[*]} already had windows and were left alone."
+  fi
+else
+  notify_send "$profile_name is ready" ""
+fi

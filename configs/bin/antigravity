@@ -1,0 +1,11 @@
+#!/bin/bash
+if command -v agy &>/dev/null; then
+    exec agy "$@"
+elif [ -x "$HOME/.gemini/antigravity-cli/bin/agy" ]; then
+    exec "$HOME/.gemini/antigravity-cli/bin/agy" "$@"
+elif [ -x /usr/bin/agy ]; then
+    exec /usr/bin/agy "$@"
+else
+    echo "Antigravity CLI (agy) is not installed." >&2
+    exit 1
+fi

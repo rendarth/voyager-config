@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#
+# Launch Battle.net inside Gamescope with raw cursor grab for high-polling mice (e.g. LAMZU 8K).
+#
+set -euo pipefail
+
+PREFIX="$HOME/Games/battlenet"
+LAUNCHER="$PREFIX/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe"
+
+if [[ ! -f "$LAUNCHER" ]]; then
+	echo "Battle.net is not installed at $LAUNCHER" >&2
+	exit 1
+fi
+
+WIDTH="${GSC_WIDTH:-2560}"
+HEIGHT="${GSC_HEIGHT:-1440}"
+REFRESH="${GSC_REFRESH:-165}"
+GSC_OPTS=(-w "$WIDTH" -h "$HEIGHT" -r "$REFRESH" -f --force-grab-cursor)
+if [[ -n "${GSC_OUTPUT:-}" ]]; then
+	GSC_OPTS+=(-O "$GSC_OUTPUT")
+fi
+
+env_args=(
+	WINEPREFIX="$PREFIX"
+	PROTONPATH=GE-Proton
+	GAMEID=umu-battlenet
+	PROTON_VERB=run
+	DXVK_STATE_CACHE_PATH="$PREFIX/drive_c/users/steamuser/AppData/Local/dxvk"
+)
+
+if command -v nvidia-smi &>/dev/null; then
+	env_args+=(
+		__NV_PRIME_RENDER_OFFLOAD=1
+		__GLX_VENDOR_LIBRARY_NAME=nvidia
+		__VK_LAYER_NV_optimus=NVIDIA_only
+		VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json
+	)
+fi
+
+exec gamescope "${GSC_OPTS[@]}" -- env "${env_args[@]}" umu-run "$LAUNCHER"

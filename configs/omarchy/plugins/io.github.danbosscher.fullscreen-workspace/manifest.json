@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.danbosscher.fullscreen-workspace",
+  "name": "Fullscreen Workspace",
+  "version": "1.0.0",
+  "author": "Dan Bosscher",
+  "license": "MIT",
+  "description": "Moves true fullscreen windows to a dedicated workspace and optionally returns them when fullscreen ends.",
+  "kinds": [
+    "service"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml"
+  }
+}

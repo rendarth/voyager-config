@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "pinBox": {
+    "mode": "dots",
+    "radius": 18,
+    "width": 380,
+    "height": 66,
+    "opacity": 0.88,
+    "placeholder": "Enter Password",
+    "borderThickness": 3,
+    "fontSize": 22,
+    "showFingerprintHint": true
+  },
+  "clock": {
+    "enabled": true,
+    "format": "12h",
+    "showAmPm": true,
+    "layout": "horizontal",
+    "position": "above_pin",
+    "fontFamily": "JetBrainsMono Nerd Font",
+    "fontSize": 72,
+    "fontWeight": "bold",
+    "letterSpacing": 2,
+    "color": ""
+  },
+  "date": {
+    "enabled": true,
+    "position": "below_clock",
+    "format": "dddd, MMMM d",
+    "fontSize": 16,
+    "capitalize": true
+  },
+  "user": {
+    "enabled": true,
+    "avatarEnabled": false,
+    "avatarSize": 84,
+    "avatarCustomPath": "",
+    "greetingEnabled": true,
+    "greetingTemplate": "Welcome back, {user}",
+    "quoteEnabled": false,
+    "quoteMode": "random",
+    "quoteFixedIndex": 0,
+    "position": "above_pin"
+  },
+  "media": {
+    "enabled": true,
+    "showAlbumArt": true,
+    "showProgress": true,
+    "compact": false,
+    "position": "bottom"
+  },
+  "visuals": {
+    "animations": true,
+    "backgroundBlur": 1,
+    "contrast": -0.08,
+    "pulseColon": true,
+    "breathingFocus": true,
+    "glassEffect": true
+  },
+  "menu": {
+    "enablePowerMenu": true,
+    "showIcons": true,
+    "showBarIcon": true,
+    "barIcon": "󰌾"
+  },
+  "layout": {
+    "position": "center",
+    "margin": 40
+  },
+  "wallpaper": {
+    "mode": "system",
+    "customPath": "",
+    "history": [],
+    "blur": 0.25,
+    "dim": 0.38
+  }
+}

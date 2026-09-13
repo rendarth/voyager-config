@@ -1,0 +1,17 @@
+(17:12:35) [INFO]:    GOG REDIST:: GOGDL_CONFIG_PATH=/home/pat/.config/heroic/gogdlConfig /opt/Heroic/resources/app.asar.unpacked/build/bin/x64/linux/gogdl --auth-config-path /home/pat/.config/heroic/gog_store/auth.json redist --ids ISI,MSVC2012_x64,MSVC2013_x64,MSVC2015_x64,MSVC2015 --path /home/pat/.config/heroic/tools/redist/gog 
+
+[API] INFO: Getting Dependencies repository
+(51.71555423736572, 'MB') 54227689
+(52.67173767089844, 'MB') 55230320
+[PROGRESS] INFO: = Progress: 0.00 0/55230320, Running for: 00:00:00, ETA: 00:00:00
+[PROGRESS] INFO: = Downloaded: 0.00 MiB, Written: 0.00 MiB
+[PROGRESS] INFO:  + Download	- 0.00 MiB/s (raw) / 0.00 MiB/s (decompressed)
+[PROGRESS] INFO:  + Disk	- 0.00 MiB/s (write) / 0.00 MiB/s (read)
+[PROGRESS] INFO: = Progress: 72.57 40080312/55230320, Running for: 00:00:01, ETA: 00:00:00
+[PROGRESS] INFO: = Downloaded: 51.72 MiB, Written: 38.22 MiB
+[PROGRESS] INFO:  + Download	- 14.74 MiB/s (raw) / 15.43 MiB/s (decompressed)
+[PROGRESS] INFO:  + Disk	- 28.74 MiB/s (write) / 0.00 MiB/s (read)
+[PROGRESS] INFO: = Progress: 100.00 55230320/55230320, Running for: 00:00:02, ETA: 00:00:00
+[PROGRESS] INFO: = Downloaded: 51.72 MiB, Written: 52.67 MiB
+[PROGRESS] INFO:  + Download	- 7.46 MiB/s (raw) / 7.46 MiB/s (decompressed)
+[PROGRESS] INFO:  + Disk	- 13.38 MiB/s (write) / 0.00 MiB/s (read)

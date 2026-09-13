@@ -1,0 +1,111 @@
+# ==============================================================================
+# Landfall Desktop Containerfile for Fedora Bootc / Custom ISO Creator
+# Build custom bootable Hyprland image or ISO (Zero DEs, Pure Hyprland)
+# ==============================================================================
+FROM quay.io/fedora/fedora-bootc:43
+
+
+
+# Remove default GNOME desktop environment packages & bloatware from Silverblue base
+RUN rpm-ostree override remove \
+    gnome-shell \
+    gnome-classic-session \
+    gnome-software \
+    gnome-tour \
+    gnome-user-docs \
+    gnome-terminal \
+    nautilus \
+    epiphany \
+    totem \
+    yelp 2>/dev/null || true
+
+# Enable RPM Fusion for Steam & multimedia codecs
+RUN rpm-ostree install -y \
+    https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-41.noarch.rpm \
+    https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-41.noarch.rpm 2>/dev/null || true
+
+
+# Install base desktop stack & tools into the container image
+RUN rpm-ostree install -y \
+    waybar \
+    foot \
+    thunar \
+    xdg-desktop-portal-hyprland \
+    grim \
+    slurp \
+    wl-clipboard \
+    swaybg \
+    fastfetch \
+    btop \
+    distrobox \
+    podman \
+    flatpak \
+    eza \
+    fzf \
+    bat \
+    zoxide \
+    git \
+    gamescope \
+    mangohud \
+    mpv \
+    flatseal \
+    NetworkManager \
+    NetworkManager-wifi \
+    NetworkManager-tui \
+    wpa_supplicant \
+    dhcp-client \
+    iputils \
+    net-tools \
+    rofi-wayland && \
+    mkdir -p /etc/NetworkManager/conf.d && \
+    printf '[main]\nplugins=keyfile\n\n[device]\nwifi.scan-rand-mac-address=no\n\n[keyfile]\nunmanaged-devices=none\n' > /etc/NetworkManager/conf.d/10-globally-managed-devices.conf && \
+    systemctl enable NetworkManager.service systemd-resolved.service && \
+    curl -sSL https://github.com/topgrade-rs/topgrade/releases/download/v16.0.1/topgrade-v16.0.1-x86_64-unknown-linux-musl.tar.gz | tar -xz -C /usr/local/bin topgrade && \
+    curl -sSL https://github.com/sentriz/cliphist/releases/download/v0.5.0/v0.5.0-linux-amd64 -o /usr/local/bin/cliphist && \
+    chmod +x /usr/local/bin/topgrade /usr/local/bin/cliphist
+
+
+
+
+
+# Copy repository context to build layer
+COPY . /tmp/landfall
+
+# Bake dotfiles, Hyprland configs, themes, wallpapers, and desktop shortcuts into system defaults (/etc/skel and /usr/share/applications)
+RUN chmod +x /tmp/landfall/scripts/theme/*.sh && \
+    /tmp/landfall/scripts/theme/gen-hyprland.sh /tmp/landfall/themes/aether /etc/skel/.config/hypr && \
+    /tmp/landfall/scripts/theme/gen-shell-bar.sh /tmp/landfall/themes/aether /etc/skel/.config/quickshell && \
+    /tmp/landfall/scripts/theme/gen-rofi.sh /tmp/landfall/themes/aether /etc/skel/.config/rofi && \
+    mkdir -p /etc/skel/.config/wallpapers \
+             /etc/skel/.config/foot \
+             /etc/skel/.config/alacritty \
+             /etc/skel/.config/tmux \
+             /etc/skel/.config/shell \
+             /etc/skel/.config/git \
+             /etc/skel/.config/btop \
+             /etc/skel/.config/lazygit \
+             /etc/skel/.config/fastfetch \
+             /etc/skel/.local/share/applications \
+             /usr/share/applications && \
+    cp -rf /tmp/landfall/wallpapers/* /etc/skel/.config/wallpapers/ 2>/dev/null || true && \
+    cp -f /tmp/landfall/config/foot/foot.ini /etc/skel/.config/foot/foot.ini 2>/dev/null || true && \
+    cp -f /tmp/landfall/themes/aether/foot.ini /etc/skel/.config/foot/theme.ini 2>/dev/null || true && \
+    sed -i 's#^include=.*#include=~/.config/foot/theme.ini#' /etc/skel/.config/foot/foot.ini 2>/dev/null || true && \
+    cp -f /tmp/landfall/config/alacritty/alacritty.toml /etc/skel/.config/alacritty/alacritty.toml 2>/dev/null || true && \
+    cp -f /tmp/landfall/themes/aether/alacritty.toml /etc/skel/.config/alacritty/theme.toml 2>/dev/null || true && \
+    cp -f /tmp/landfall/config/tmux/tmux.conf /etc/skel/.config/tmux/tmux.conf 2>/dev/null || true && \
+    cp -rf /tmp/landfall/config/shell/* /etc/skel/.config/shell/ 2>/dev/null || true && \
+    cp -f /tmp/landfall/config/shell/.bashrc /etc/skel/.bashrc 2>/dev/null || true && \
+    cp -f /tmp/landfall/config/starship/starship.toml /etc/skel/.config/starship.toml 2>/dev/null || true && \
+    cp -f /tmp/landfall/config/git/config /etc/skel/.config/git/config 2>/dev/null || true && \
+    cp -f /tmp/landfall/config/btop/btop.conf /etc/skel/.config/btop/btop.conf 2>/dev/null || true && \
+    cp -f /tmp/landfall/config/lazygit/config.yml /etc/skel/.config/lazygit/config.yml 2>/dev/null || true && \
+    cp -f /tmp/landfall/config/fastfetch/config.jsonc /etc/skel/.config/fastfetch/config.jsonc 2>/dev/null || true && \
+    if [ -d /root/.config/waybar ]; then cp -rf /root/.config/waybar /etc/skel/.config/; fi && \
+    cp -rf /tmp/landfall/apps/*.desktop /usr/share/applications/ 2>/dev/null || true && \
+    cp -rf /tmp/landfall /usr/share/landfall && \
+    rm -rf /tmp/landfall && \
+    ostree container commit
+
+
+
