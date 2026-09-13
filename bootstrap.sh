@@ -127,7 +127,7 @@ stage_deps() {
 			wayland wayland-protocols libxkbcommon libinput pixman cairo pango \
 			xdg-desktop-portal xdg-desktop-portal-hyprland libsecret gnome-keyring \
 			thunar foot distrobox podman docker docker-compose waybar tmux \
-			grim slurp wl-clipboard cliphist swaybg eza fzf bat zoxide gum mpv topgrade flatseal
+			grim slurp wl-clipboard cliphist swaybg eza fzf bat zoxide gum mpv flatseal
 		if ((IS_OMARCHY)); then
 			ok "Omarchy desktop detected — Hyprland stack managed by the omarchy package; skipping duplicate system packages."
 		else
