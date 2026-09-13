@@ -33,7 +33,6 @@ _dbx_ensure_box() {
 		warn "distrobox not available on host; skipping Tier 2."
 		return 1
 	}
-	in_path podman || in_path docker || { in_path distrobox-host-unshare; } || true
 	if ! in_path podman && ! in_path docker; then
 		warn "Neither podman nor docker available; skipping Tier 2."
 		return 1

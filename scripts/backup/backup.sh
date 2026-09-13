@@ -22,8 +22,10 @@ mkdir -p "$(dirname "$LOG")" "$VOYAGER_DIR"
 
 	# 1. Hyprland (canonical Lua)
 	mkdir -p "$VOYAGER_DIR/configs/hypr"
-	cp -ru "$HOME/.config/hypr/"*.lua "$HOME/.config/hypr/"*.conf 2>/dev/null || true
-	cp -ru "$HOME/.config/hypr/xdph.conf" "$VOYAGER_DIR/configs/hypr/" 2>/dev/null || true
+	shopt -s nullglob
+	cp -u "$HOME/.config/hypr/"*.lua "$VOYAGER_DIR/configs/hypr/" 2>/dev/null || true
+	cp -u "$HOME/.config/hypr/"*.conf "$VOYAGER_DIR/configs/hypr/" 2>/dev/null || true
+	cp -u "$HOME/.config/hypr/xdph.conf" "$VOYAGER_DIR/configs/hypr/" 2>/dev/null || true
 	rm -f "$VOYAGER_DIR/configs/hypr/"*.bak.* 2>/dev/null || true
 
 	# 2. Omarchy tree

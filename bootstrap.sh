@@ -29,8 +29,13 @@ ARG_STAGE="" ARG_VERIFY=0 ARG_YES=0
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 	--stage)
-		ARG_STAGE="${2:-}"
+		[[ -n "${2+x}" ]] || die "--stage requires a stage name: deps|configs|agents|gaming|apps|webapps|bootloader|verify"
+		ARG_STAGE="$2"
 		shift 2
+		;;
+	--stage=*)
+		ARG_STAGE="${1#*=}"
+		shift
 		;;
 	--dry-run)
 		VOYAGER_DRYRUN=1

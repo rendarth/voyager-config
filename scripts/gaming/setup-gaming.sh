@@ -91,18 +91,33 @@ EOF
 	update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 
 	if ((!VOYAGER_DRYRUN)) && [[ ! -d "$HOME/Games/battlenet" ]]; then
-		log "Bootstrapping initial Battle.net installation in background..."
-		"$HOME/.local/bin/omarchy-install-gaming-battlenet" 2>/dev/null || true
+		log "Bootstrapping initial Battle.net installation in the background..."
+		mkdir -p "$HOME/.local/log"
+		"$HOME/.local/bin/omarchy-install-gaming-battlenet" \
+			>"$HOME/.local/log/install-battlenet.log" 2>&1 &
+		disown 2>/dev/null || true
 	fi
 }
 
 setup_heroic() {
 	mkdir -p "$HOME/.config/heroic"
 	[[ -f "$VOYAGER_CONFIGS/heroic/config.json" ]] || return 0
-	sed "s#/home/[^/]*#$HOME#g" "$VOYAGER_CONFIGS/heroic/config.json" >/tmp/voyager-heroic-config.json
-	deploy_file /tmp/voyager-heroic-config.json "$HOME/.config/heroic/config.json"
-	rm -f /tmp/voyager-heroic-config.json
-	deploy_tree "$VOYAGER_CONFIGS/heroic/GamesConfig" "$HOME/.config/heroic/GamesConfig" 2>/dev/null || true
+
+	local tmp
+	tmp="$(mktemp)" || {
+		warn "heroic: could not create temp file; skipping config rewrite"
+		return 1
+	}
+	trap 'rm -f "$tmp"' RETURN
+	sed "s#/home/[^/]*#$HOME#g" "$VOYAGER_CONFIGS/heroic/config.json" >"$tmp"
+	deploy_file "$tmp" "$HOME/.config/heroic/config.json"
+	rm -f "$tmp"
+
+	if [[ -d "$VOYAGER_CONFIGS/heroic/GamesConfig" ]]; then
+		deploy_tree "$VOYAGER_CONFIGS/heroic/GamesConfig" "$HOME/.config/heroic/GamesConfig"
+	else
+		warn "heroic: GamesConfig source missing; skipping"
+	fi
 }
 
 setup_udev() {
