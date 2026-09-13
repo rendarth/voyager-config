@@ -51,7 +51,7 @@ die() {
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/voyager-config"
 mkdir -p "$CACHE"
 
-BASE="https://github.com/rendarth/voyager-config/archive/refs"
+BASE="https://github.com/rendarth/voyager-config/archive"
 case "$SPIN_REF" in
 v*)
 	REF_SPEC="refs/tags/$SPIN_REF"
@@ -70,16 +70,16 @@ log "Fetching voyager-config@$SPIN_REF ..."
 curl -fsSL "$BASE/$REF_SPEC.tar.gz" -o "$TARBALL" || die "download failed: $BASE/$REF_SPEC.tar.gz"
 
 if ((SPIN_VERIFY_SHA)); then
-	if SHA256="$(curl -fsSL "$SHAURL" 2>/dev/null)"; then
-		EXPECTED="$(printf '%s\n' "$SHA256" | awk -F'  *' '{print $1; exit}')"
+	VERIFY_SHA="$(curl -fsSL "$SHAURL" 2>/dev/null || true)"
+	EXPECTED="$(printf '%s\n' "$VERIFY_SHA" | grep -Eo '^[0-9a-f]{64}' | head -n1 || true)"
+	if [[ -n "$EXPECTED" ]]; then
 		ACTUAL="$(sha256sum "$TARBALL" | awk '{print $1}')"
-		if [[ -n "$EXPECTED" && "$ACTUAL" != "$EXPECTED" ]]; then
+		if [[ "$ACTUAL" != "$EXPECTED" ]]; then
 			die "sha256 mismatch for $TARBALL (expected $EXPECTED, got $ACTUAL). Refusing to run."
 		fi
 		log "sha256 verified."
 	else
-		warn_sha() { printf '\e[33m[spin][warn]\e[0m %s\n' "no pinned sha256sum.txt for ref $SPIN_REF; continuing unverified (HEAD ref)."; }
-		warn_sha
+		printf '\e[33m[spin][warn]\e[0m %s\n' "no pinned sha256 hash for ref $SPIN_REF; continuing unverified."
 	fi
 fi
 
