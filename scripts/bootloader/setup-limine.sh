@@ -100,4 +100,16 @@ CONF_EOF
 install_limine_binaries
 configure_limine_efi
 
+deploy_limine_helper_configs() {
+	local src="$VOYAGER_ROOT/etc"
+	[[ -f "$src/limine-entry-tool.conf" ]] && elevate cp -f "$src/limine-entry-tool.conf" /etc/limine-entry-tool.conf
+	[[ -f "$src/limine-snapper-sync.conf" ]] && elevate cp -f "$src/limine-snapper-sync.conf" /etc/limine-snapper-sync.conf
+	[[ -f "$src/99-omarchy-limine.hook" ]] && {
+		elevate mkdir -p /etc/pacman.d/hooks
+		elevate cp -f "$src/99-omarchy-limine.hook" /etc/pacman.d/hooks/99-omarchy-limine.hook
+	}
+	ok "Omarchy limine helper configs deployed (entry tool, snapper-sync, pacman hook)."
+}
+deploy_limine_helper_configs
+
 log "Limine configuration step complete."
